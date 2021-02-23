@@ -1,13 +1,13 @@
 extern crate proc_macro;
 
-use proc_macro2::TokenStream;
+use proc_macro2::{Span, TokenStream};
 use quote::{format_ident, quote, quote_spanned, ToTokens, TokenStreamExt};
 use syn::{
   braced,
   parse::{Parse, ParseStream},
   parse_macro_input,
   spanned::Spanned,
-  token, Attribute, Expr, Ident, PathArguments, Result, Token, TypePath, Visibility,
+  token, Attribute, Error, Expr, Ident, PathArguments, Result, Token, TypePath, Visibility,
 };
 
 trait FlatFields {
@@ -58,11 +58,11 @@ impl ToTokens for Struct {
         field.colon_token.to_tokens(tokens);
 
         if field.optional {
-          let ty = map_type(&field.ty);
-          let span = field.ty.span();
-          tokens.extend(quote_spanned!(span=> Option<#ty>))
+          let ty = &field.ty;
+          let span = ty.span();
+          tokens.extend(quote_spanned!(span=> Option<#ty>));
         } else {
-          tokens.extend(map_type(&field.ty));
+          field.ty.to_tokens(tokens);
         }
 
         let span = field.semicolon_token.span;
@@ -82,8 +82,8 @@ impl ToTokens for Struct {
           field.ident.to_tokens(&mut content);
           field.colon_token.to_tokens(&mut content);
 
-          let ty = map_type(&field.ty);
-          let span = field.ty.span();
+          let ty = &field.ty;
+          let span = ty.span();
           content.extend(quote_spanned!(span=> Option<#ty>));
           content.extend(quote! {= None});
 
@@ -105,7 +105,7 @@ impl ToTokens for Struct {
       });
 
       tokens.extend(TokenStream::from(quote! {
-        pub fn new(stream: &[u8]) -> Self {
+        pub fn new(reader: &mut BitReader) -> Self {
           #content
         }
       }))
@@ -193,6 +193,88 @@ impl ToTokens for ExprIf {
   }
 }
 
+enum FieldType {
+  Bool { span: Span },
+  Number { signed: bool, size: u8, span: Span },
+  Struct(TypePath),
+}
+
+impl Parse for FieldType {
+  fn parse(input: ParseStream) -> Result<Self> {
+    let ty = input.parse::<TypePath>()?;
+
+    if ty.qself != None {
+      return Ok(FieldType::Struct(ty));
+    }
+
+    let path = &ty.path;
+    if path.leading_colon != None {
+      return Ok(FieldType::Struct(ty));
+    }
+
+    if path.segments.len() != 1 {
+      return Ok(FieldType::Struct(ty));
+    }
+
+    let segment = &path.segments[0];
+    if segment.arguments != PathArguments::None {
+      return Ok(FieldType::Struct(ty));
+    }
+
+    let name = segment.ident.to_string();
+    if name == "bool" {
+      return Ok(FieldType::Bool { span: ty.span() });
+    }
+
+    let signed = name
+      .chars()
+      .nth(0)
+      .ok_or(Error::new(ty.span(), "invalid type name"))?
+      == 'i';
+
+    match name[1..].parse::<u8>() {
+      Ok(size) => {
+        if size > 128 {
+          return Err(Error::new(ty.span(), "size is too large"));
+        }
+
+        Ok(FieldType::Number {
+          signed,
+          size,
+          span: ty.span(),
+        })
+      }
+      Err(_) => Ok(FieldType::Struct(ty)),
+    }
+  }
+}
+
+impl ToTokens for FieldType {
+  fn to_tokens(&self, tokens: &mut TokenStream) {
+    match self {
+      Self::Bool { span } => tokens.extend(quote_spanned!(*span=> bool)),
+      Self::Number { signed, size, span } => {
+        if size < &8 {
+          tokens.append(Ident::new("u8", *span));
+        } else {
+          let mut ident = format_ident!(
+            "{}{}",
+            if *signed { 'i' } else { 'u' },
+            (2.0f32)
+              .powi((*size as f32).log2().ceil() as i32)
+              .to_string()
+          );
+          ident.set_span(*span);
+          tokens.append(ident);
+        }
+      }
+      Self::Struct(ty) => {
+        ty.to_tokens(tokens);
+      }
+    }
+  }
+}
+
 struct Field {
   pub optional: bool,
 
@@ -210,13 +292,13 @@ struct Field {
   pub colon_token: Token![:],
 
   /// Type of the field.
-  pub ty: TypePath,
+  pub ty: FieldType,
 
   pub semicolon_token: Token![;],
 }
 
 impl Field {
-  fn parse(input: ParseStream, optional: bool) -> Result<Self> {
+  pub fn parse(input: ParseStream, optional: bool) -> Result<Self> {
     Ok(Field {
       optional,
       attrs: input.call(Attribute::parse_outer)?,
@@ -227,46 +309,6 @@ impl Field {
       semicolon_token: input.parse()?,
     })
   }
-}
-
-fn map_type(ty: &TypePath) -> TokenStream {
-  if ty.qself != None {
-    return ty.to_token_stream();
-  }
-
-  let path = &ty.path;
-  if path.leading_colon != None {
-    return ty.to_token_stream();
-  }
-
-  if path.segments.len() != 1 {
-    return ty.to_token_stream();
-  }
-
-  let segment = &path.segments[0];
-  if segment.arguments != PathArguments::None {
-    return ty.to_token_stream();
-  }
-
-  let name = segment.ident.to_string();
-  let span = ty.span();
-  let signed = name.chars().nth(0).unwrap();
-  let size = name[1..].parse::<u8>().unwrap();
-  let result;
-
-  if size <= 8 {
-    result = format_ident!("{}8", signed);
-  } else if size <= 16 {
-    result = format_ident!("{}16", signed);
-  } else if size <= 32 {
-    result = format_ident!("{}32", signed);
-  } else if size <= 64 {
-    result = format_ident!("{}64", signed);
-  } else {
-    panic!();
-  }
-
-  return TokenStream::from(quote_spanned!(span=> #result));
 }
 
 impl FlatFields for Field {
@@ -283,11 +325,24 @@ impl ToTokens for Field {
 
     self.ident.to_tokens(tokens);
 
-    let span = self.ty.span();
+    let parser = match &self.ty {
+      FieldType::Bool { span } => quote_spanned!(*span=> reader.next()? == 1),
+      FieldType::Number {
+        signed: _,
+        size,
+        span,
+      } => quote_spanned!(*span=> reader.read(#size)?),
+      FieldType::Struct(ty) => {
+        let span = ty.span();
+        quote_spanned!(span=> #ty::new(reader)?)
+      }
+    };
+
+    let span = parser.span();
     if self.optional {
-      tokens.extend(quote_spanned!(span=> = Some(0)));
+      tokens.extend(quote_spanned!(span=> = Some(#parser)));
     } else {
-      tokens.extend(quote_spanned!(span=> = 0));
+      tokens.extend(quote_spanned!(span=> = #parser));
     }
 
     self.semicolon_token.to_tokens(tokens);
