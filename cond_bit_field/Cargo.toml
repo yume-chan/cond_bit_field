@@ -5,9 +5,10 @@ description = "Macro to create bit field types with conditional fields"
 edition = "2018"
 keywords = ["bitfield"]
 license = "MIT"
-name = "cond_bit_field_macro"
+name = "cond_bit_field"
 repository = "https://github.com/yume-chan/cond_bit_field"
 version = "0.1.0"
+
 [lib]
 proc-macro = true
 

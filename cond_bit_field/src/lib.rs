@@ -2,13 +2,11 @@ extern crate proc_macro;
 
 use proc_macro2::{Span, TokenStream};
 use quote::{format_ident, quote, quote_spanned, ToTokens, TokenStreamExt};
-use syn::{
-  braced,
-  parse::{Parse, ParseStream},
-  parse_macro_input,
-  spanned::Spanned,
-  token, Attribute, Error, Expr, Ident, PathArguments, Result, Token, TypePath, Visibility,
-};
+use syn::{braced,
+          parse::{Parse, ParseStream},
+          parse_macro_input,
+          spanned::Spanned,
+          token, Attribute, Error, Expr, Ident, PathArguments, Result, Token, TypePath, Visibility};
 
 trait FlatFields {
   fn flat_fields(&self) -> Vec<&Field>;
@@ -70,8 +68,8 @@ impl ToTokens for Struct {
       }
     });
 
-    tokens.append(Ident::new("impl", self.ident.span()));
-    self.ident.to_tokens(tokens);
+    let ident = &self.ident;
+    tokens.extend(quote! {impl ReadInto for #ident});
     self.brace_token.surround(tokens, |tokens| {
       let mut content = TokenStream::new();
 
@@ -95,20 +93,18 @@ impl ToTokens for Struct {
         item.to_tokens(&mut content);
       }
 
-      self.ident.to_tokens(&mut content);
-
       let field_names = fields.iter().map(|x| &x.ident);
       content.extend(quote! {
-        {
+        Ok(#ident{
           #(#field_names),*
-        }
+        })
       });
 
-      tokens.extend(TokenStream::from(quote! {
-        pub fn new(reader: &mut BitReader) -> Self {
+      tokens.extend(quote! {
+        pub fn read<R: Read>(reader: &mut BitReader<R>) -> Result<Self> {
           #content
         }
-      }))
+      })
     });
   }
 }
@@ -326,15 +322,15 @@ impl ToTokens for Field {
     self.ident.to_tokens(tokens);
 
     let parser = match &self.ty {
-      FieldType::Bool { span } => quote_spanned!(*span=> reader.next()? == 1),
+      FieldType::Bool { span } => quote_spanned!(*span=> reader.read_bit()? == 1),
       FieldType::Number {
         signed: _,
         size,
         span,
-      } => quote_spanned!(*span=> reader.read(#size)?),
+      } => quote_spanned!(*span=> reader.read_sized(#size)?),
       FieldType::Struct(ty) => {
         let span = ty.span();
-        quote_spanned!(span=> #ty::new(reader)?)
+        quote_spanned!(span=> reader.read(reader)?)
       }
     };
 
