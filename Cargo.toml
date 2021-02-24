@@ -1,11 +1,13 @@
 [package]
-authors = ["Simon Chan"]
+authors = ["Simon Chan <cnsimonchan@live.com>"]
+category = ["data-structures", "encoding"]
+description = "Macro to create bit field types with conditional fields"
 edition = "2018"
-name = "nal_unit_def"
+keywords = ["bitfield"]
+license = "MIT"
+name = "cond_bit_field_macro"
+repository = "https://github.com/yume-chan/cond_bit_field"
 version = "0.1.0"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [lib]
 proc-macro = true
 
