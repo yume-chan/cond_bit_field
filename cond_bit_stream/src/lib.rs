@@ -74,8 +74,7 @@ impl<R: Read> BitRead for BitReader<R> {
     }
 
     let bytes = (size as f32 / 8f32).ceil() as usize;
-    let mut buf = Vec::with_capacity(bytes);
-    buf.resize(bytes, 0);
+    let mut buf = vec![0; bytes];
     self
       .inner
       .read_exact(&mut buf)

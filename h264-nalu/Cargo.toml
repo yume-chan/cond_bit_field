@@ -1,16 +1,14 @@
 [package]
 authors = ["Simon Chan <cnsimonchan@live.com>"]
-categories = ["data-structures", "encoding"]
-description = "Read bits from Read"
+categories = ["encoding"]
+description = "Parse H.264 NAL units"
 edition = "2018"
-keywords = ["bitfield"]
+keywords = ["h264"]
 license = "MIT"
-name = "cond_bit_stream"
+name = "h264-nalu"
 repository = "https://github.com/yume-chan/cond_bit_field"
 version = "0.1.0"
 
 [dependencies]
-thiserror = "1.0"
-
-[dev-dependencies]
 cond_bit_field = {path = "../cond_bit_field"}
+cond_bit_stream = {path = "../cond_bit_stream"}

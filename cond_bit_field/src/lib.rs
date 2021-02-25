@@ -366,7 +366,7 @@ impl ToTokens for Field {
       FieldType::Bool { .. } => quote! {reader.read_bit()? == 1},
       FieldType::Number { size, .. } => quote! {reader.read_sized(#size)?},
       FieldType::Struct(_) => {
-        quote! {reader.read(reader)?}
+        quote! {reader.read()?}
       }
     };
 
