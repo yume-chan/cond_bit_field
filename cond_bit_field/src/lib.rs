@@ -49,27 +49,35 @@ impl ToTokens for Struct {
       .collect::<Vec<_>>();
 
     self.brace_token.surround(tokens, |tokens| {
-      for field in fields.iter() {
-        tokens.append_all(&field.attrs);
-        field.vis.to_tokens(tokens);
-        field.ident.to_tokens(tokens);
-        field.colon_token.to_tokens(tokens);
+      let definitions = fields.iter().map(
+        |Field {
+           optional,
+           attrs,
+           vis,
+           ident,
+           colon_token,
+           ty,
+           ..
+         }| {
+          let ty = if *optional {
+            quote_spanned!(ty.span()=> Option<#ty>)
+          } else {
+            quote! {#ty}
+          };
 
-        if field.optional {
-          let ty = &field.ty;
-          let span = ty.span();
-          tokens.extend(quote_spanned!(span=> Option<#ty>));
-        } else {
-          field.ty.to_tokens(tokens);
-        }
+          quote! {
+            #(#attrs)* #vis #ident #colon_token #ty
+          }
+        },
+      );
 
-        let span = field.semicolon_token.span;
-        tokens.extend(quote_spanned!(span=> ,));
-      }
+      tokens.extend(quote! {
+        #(#definitions),*
+      });
     });
 
     let ident = &self.ident;
-    tokens.extend(quote! {impl ReadInto for #ident});
+    tokens.extend(quote! {impl BitField for #ident});
     self.brace_token.surround(tokens, |tokens| {
       let mut content = TokenStream::new();
 
@@ -101,7 +109,7 @@ impl ToTokens for Struct {
       });
 
       tokens.extend(quote! {
-        pub fn read<R: Read>(reader: &mut BitReader<R>) -> Result<Self> {
+        fn read(reader: &mut impl BitRead) -> Result<Self> {
           #content
         }
       })
@@ -283,62 +291,89 @@ struct Field {
   /// Name of the field, if any.
   ///
   /// Fields of tuple structs have no names.
-  pub ident: Ident,
+  pub ident: Option<Ident>,
 
-  pub colon_token: Token![:],
+  pub colon_token: token::Colon,
 
   /// Type of the field.
   pub ty: FieldType,
 
-  pub semicolon_token: Token![;],
+  pub semicolon_token: token::Semi,
 }
 
 impl Field {
   pub fn parse(input: ParseStream, optional: bool) -> Result<Self> {
+    let attrs = input.call(Attribute::parse_outer)?;
+    let vis = input.parse()?;
+    let ident = match input.parse::<Option<token::Underscore>>()? {
+      Some(_) => None,
+      None => input.parse()?,
+    };
+    let colon_token = input.parse()?;
+    let ty = input.parse()?;
+    let semicolon_token = input.parse()?;
+
+    if ident == None && !matches!(ty, FieldType::Number { .. }) {
+      return Err(Error::new_spanned(
+        ty,
+        "Type of skip members must be integer",
+      ));
+    }
+
     Ok(Field {
       optional,
-      attrs: input.call(Attribute::parse_outer)?,
-      vis: input.parse()?,
-      ident: input.parse()?,
-      colon_token: input.parse()?,
-      ty: input.parse()?,
-      semicolon_token: input.parse()?,
+      attrs,
+      vis,
+      ident,
+      colon_token,
+      ty,
+      semicolon_token,
     })
   }
 }
 
 impl FlatFields for Field {
   fn flat_fields(&self) -> Vec<&Field> {
+    if self.ident == None {
+      return vec![];
+    }
+
     vec![self]
   }
 }
 
 impl ToTokens for Field {
   fn to_tokens(&self, tokens: &mut TokenStream) {
-    if !self.optional {
-      tokens.append(Ident::new("let", self.ident.span()));
+    if self.ident == None {
+      let span = self.ident.span();
+      let size = match self.ty {
+        FieldType::Number { size, .. } => size,
+        _ => unreachable!(),
+      };
+      tokens.extend(quote_spanned! {span=> reader.skip(#size)?;});
+      return;
     }
 
-    self.ident.to_tokens(tokens);
+    let Field { ident, ty, .. } = self;
 
-    let parser = match &self.ty {
-      FieldType::Bool { span } => quote_spanned!(*span=> reader.read_bit()? == 1),
-      FieldType::Number {
-        signed: _,
-        size,
-        span,
-      } => quote_spanned!(*span=> reader.read_sized(#size)?),
-      FieldType::Struct(ty) => {
-        let span = ty.span();
-        quote_spanned!(span=> reader.read(reader)?)
+    if !self.optional {
+      tokens.extend(quote! {let #ident: #ty =});
+    } else {
+      tokens.extend(quote! {#ident =});
+    }
+
+    let parser = match ty {
+      FieldType::Bool { .. } => quote! {reader.read_bit()? == 1},
+      FieldType::Number { size, .. } => quote! {reader.read_sized(#size)?},
+      FieldType::Struct(_) => {
+        quote! {reader.read(reader)?}
       }
     };
 
-    let span = parser.span();
     if self.optional {
-      tokens.extend(quote_spanned!(span=> = Some(#parser)));
+      tokens.extend(quote! {Some(#parser)});
     } else {
-      tokens.extend(quote_spanned!(span=> = #parser));
+      tokens.extend(parser);
     }
 
     self.semicolon_token.to_tokens(tokens);
@@ -346,7 +381,7 @@ impl ToTokens for Field {
 }
 
 #[proc_macro]
-pub fn cond_struct(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+pub fn cond_bit_field(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
   let data = parse_macro_input!(input as Struct);
   proc_macro::TokenStream::from(quote! {#data})
 }

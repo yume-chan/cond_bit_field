@@ -1,6 +1,6 @@
 [package]
 authors = ["Simon Chan <cnsimonchan@live.com>"]
-category = ["data-structures", "encoding"]
+categories = ["data-structures", "encoding"]
 description = "Macro to create bit field types with conditional fields"
 edition = "2018"
 keywords = ["bitfield"]
@@ -11,3 +11,6 @@ version = "0.1.0"
 
 [dependencies]
 thiserror = "1.0"
+
+[dev-dependencies]
+cond_bit_field = {path = "../cond_bit_field"}

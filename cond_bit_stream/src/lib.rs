@@ -1,4 +1,4 @@
-use std::io::Read;
+use std::{io::Read, slice};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -9,9 +9,49 @@ pub enum BitReaderError {
   TooLarge,
 }
 
+pub trait BitField {
+  fn read(reader: &mut impl BitRead) -> Result<Self>
+  where
+    Self: Sized;
+}
+
+pub trait SizedBitField {
+  fn read_sized(reader: &mut impl BitRead, size: u8) -> Result<Self>
+  where
+    Self: Sized;
+}
+
+pub trait BitRead {
+  fn skip(&mut self, size: u8) -> Result<()>;
+
+  fn read_bit(&mut self) -> Result<u8>;
+
+  fn read_bits(&mut self, num: u8) -> Result<u64> {
+    let mut result = 0u64;
+    for _ in 0..num {
+      result = result << 1 | self.read_bit()? as u64;
+    }
+    Ok(result)
+  }
+
+  fn read<T: BitField>(&mut self) -> Result<T>
+  where
+    Self: Sized,
+  {
+    T::read(self)
+  }
+
+  fn read_sized<T: SizedBitField>(&mut self, size: u8) -> Result<T>
+  where
+    Self: Sized,
+  {
+    T::read_sized(self, size)
+  }
+}
+
 pub struct BitReader<R> {
   inner: R,
-  buf: [u8; 1],
+  buf: u8,
   pos: u8,
 }
 
@@ -21,56 +61,50 @@ impl<R: Read> BitReader<R> {
   pub fn new(inner: R) -> BitReader<R> {
     BitReader {
       inner,
-      buf: [0],
+      buf: 0,
       pos: 8,
     }
   }
+}
 
-  pub fn read_bit(&mut self) -> Result<u8> {
+impl<R: Read> BitRead for BitReader<R> {
+  fn skip(&mut self, mut size: u8) -> Result<()> {
+    if self.pos + size > 7 {
+      size -= 7 - self.pos;
+    }
+
+    let bytes = (size as f32 / 8f32).ceil() as usize;
+    let mut buf = Vec::with_capacity(bytes);
+    buf.resize(bytes, 0);
+    self
+      .inner
+      .read_exact(&mut buf)
+      .or(Err(BitReaderError::NotEnoughData))?;
+
+    self.pos = size % 8;
+    self.buf = buf[bytes - 1];
+    Ok(())
+  }
+
+  fn read_bit(&mut self) -> Result<u8> {
     if self.pos == 8 {
       self
         .inner
-        .read_exact(&mut self.buf)
+        .read_exact(slice::from_mut(&mut self.buf))
         .or(Err(BitReaderError::NotEnoughData))?;
       self.pos = 0;
     }
 
-    Ok((self.buf[0] >> (7 - self.pos)) & 0b1)
+    let value = (self.buf >> (7 - self.pos)) & 0b1;
+    self.pos += 1;
+    Ok(value)
   }
-
-  pub fn read_bits(&mut self, num: u8) -> Result<u64> {
-    let mut result = 0u64;
-    for _ in 0..num {
-      result = result << 1 | self.read_bit()? as u64;
-    }
-    Ok(result)
-  }
-
-  pub fn read<T: ReadInto>(&mut self) -> Result<T> {
-    T::read(self)
-  }
-
-  pub fn read_sized<T: ReadSizedInto>(&mut self, size: u8) -> Result<T> {
-    T::read_sized(self, size)
-  }
-}
-
-pub trait ReadInto {
-  fn read<R: Read>(reader: &mut BitReader<R>) -> Result<Self>
-  where
-    Self: Sized;
-}
-
-pub trait ReadSizedInto {
-  fn read_sized<R: Read>(reader: &mut BitReader<R>, size: u8) -> Result<Self>
-  where
-    Self: Sized;
 }
 
 macro_rules! impl_read_sized_into_for_prim {
   ($ty:ty, $size:expr) => {
-    impl ReadSizedInto for $ty {
-      fn read_sized<R: Read>(reader: &mut BitReader<R>, size: u8) -> Result<Self> {
+    impl SizedBitField for $ty {
+      fn read_sized(reader: &mut impl BitRead, size: u8) -> Result<Self> {
         if size > $size {
           return Err(BitReaderError::TooLarge);
         }
@@ -94,13 +128,39 @@ impl_read_sized_into_for_prim!(i128, 128);
 
 #[cfg(test)]
 mod tests {
-  use crate::BitReader;
+  use crate::*;
+  use cond_bit_field::cond_bit_field;
+
+  cond_bit_field! {
+    struct Test {
+      pub foo: bool;
+      pub bar: i5;
+
+      if !foo {
+        pub baz: i3;
+      }
+
+      _: i2;
+    }
+  }
 
   #[test]
-  fn it_works() {
-    let data = vec![0, 1, 2];
+  fn test_a() {
+    let data = vec![0b01010101, 0b10101010];
     let mut reader = BitReader::new(&data[..]);
-    let a: u8 = reader.read_sized(8).unwrap();
-    assert_eq!(a, 0);
+    let a: Test = reader.read().unwrap();
+    assert_eq!(a.foo, false);
+    assert_eq!(a.bar, 0b10101);
+    assert_eq!(a.baz, Some(0b011));
+  }
+
+  #[test]
+  fn test_b() {
+    let data = vec![0b10101010, 0b01010101];
+    let mut reader = BitReader::new(&data[..]);
+    let a: Test = reader.read().unwrap();
+    assert_eq!(a.foo, true);
+    assert_eq!(a.bar, 0b01010);
+    assert_eq!(a.baz, None);
   }
 }
