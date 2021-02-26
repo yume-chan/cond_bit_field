@@ -12,3 +12,5 @@ version = "0.1.0"
 [dependencies]
 cond_bit_field = {path = "../cond_bit_field"}
 cond_bit_stream = {path = "../cond_bit_stream"}
+num-derive = "0.3"
+num-traits = "0.2"

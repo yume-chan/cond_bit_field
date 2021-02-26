@@ -131,35 +131,123 @@ mod tests {
   use cond_bit_field::cond_bit_field;
 
   cond_bit_field! {
-    struct Test {
-      pub foo: bool;
-      pub bar: i5;
-
-      if !foo {
-        pub baz: i3;
-      }
-
-      _: i2;
+    struct Simple {
+      pub a: bool;
+      pub b: i1;
+      pub c: u1;
+      pub d: i4;
+      pub e: u4;
+      pub f: i7;
+      pub g: u7;
+      pub h: i14;
+      pub i: u14;
+      pub j: i18;
+      pub k: u18;
+      pub _: i10;
     }
   }
 
-  #[test]
-  fn test_a() {
-    let data = vec![0b01010101, 0b10101010];
-    let mut reader = BitReader::new(&data[..]);
-    let a: Test = reader.read().unwrap();
-    assert_eq!(a.foo, false);
-    assert_eq!(a.bar, 0b10101);
-    assert_eq!(a.baz, Some(0b011));
+  cond_bit_field! {
+    struct IfWithoutElse {
+      pub a: bool;
+
+      if a {
+        pub b: u3;
+        pub c: i15;
+      }
+    }
   }
 
-  #[test]
-  fn test_b() {
-    let data = vec![0b10101010, 0b01010101];
-    let mut reader = BitReader::new(&data[..]);
-    let a: Test = reader.read().unwrap();
-    assert_eq!(a.foo, true);
-    assert_eq!(a.bar, 0b01010);
-    assert_eq!(a.baz, None);
+  cond_bit_field! {
+    struct IfElse {
+      pub a: bool;
+
+      if a {
+        pub b: u3;
+        pub c: i15;
+      } else {
+        pub d: i4;
+        pub e: u10;
+      }
+
+      pub z: bool;
+    }
+  }
+
+  cond_bit_field! {
+    struct IfElseIf {
+      pub a: bool;
+
+      if a {
+        pub b: u3;
+        pub c: i15;
+      } else if !a {
+        pub d: i4;
+        pub e: u10;
+      }
+
+      pub z: bool;
+    }
+  }
+
+  cond_bit_field! {
+    struct IfElseIfElse {
+      pub a: bool;
+
+      if a {
+        pub b: u3;
+        pub c: i15;
+      } else if !a {
+        pub d: i4;
+        pub e: u10;
+      } else {
+        pub f: bool;
+        pub g: i33;
+      }
+
+      pub z: bool;
+    }
+  }
+
+  cond_bit_field! {
+    struct IfElseIfElseIf {
+      pub a: bool;
+      pub b: bool;
+
+      if a {
+        pub c: u3;
+        pub d: i15;
+      } else if !a {
+        pub e: i4;
+        pub f: u10;
+      } else if b {
+        pub g: bool;
+        pub h: i33;
+      }
+
+      pub z: bool;
+    }
+  }
+
+  cond_bit_field! {
+    struct RecursiveIf {
+      pub a: bool;
+      pub b: bool;
+
+      if a {
+        pub c: u3;
+        pub d: i15;
+
+        if !a {
+          pub e: i4;
+          pub f: u10;
+        } else if b {
+          pub g: bool;
+          pub h: i33;
+        }
+
+        pub z: bool;
+      }
+    }
   }
 }

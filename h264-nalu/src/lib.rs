@@ -1,7 +1,8 @@
 use cond_bit_field::cond_bit_field;
 use cond_bit_stream::{BitField, BitRead, Result};
+use num_derive::{FromPrimitive, NumOps, ToPrimitive};
 
-#[derive(Copy, Clone)]
+#[derive(FromPrimitive, NumOps, ToPrimitive)]
 pub struct ExpGolNumber(u64);
 
 impl BitField for ExpGolNumber {
@@ -30,7 +31,7 @@ cond_bit_field! {
     if num_slice_groups_minus1.0 > 1 {
       pub slice_group_map_type: ExpGolNumber;
 
-      if slice_group_map_type.unwrap().0 == 0 {
+      if slice_group_map_type.0 == 0 {
 
       }
     }
