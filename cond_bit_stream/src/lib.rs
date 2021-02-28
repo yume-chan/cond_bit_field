@@ -134,42 +134,59 @@ mod tests {
     struct Simple {
       pub a: bool;
       pub b: i1;
+      _: 10;
       pub c: u1;
       pub d: i4;
       pub e: u4;
+      _: 10;
       pub f: i7;
       pub g: u7;
       pub h: i14;
       pub i: u14;
+      _: 10;
       pub j: i18;
       pub k: u18;
-      pub _: i10;
+      _: 10;
     }
   }
 
   cond_bit_field! {
     struct IfWithoutElse {
       pub a: bool;
+      _: 10;
 
       if a {
+        _: 10;
         pub b: u3;
+        _: 10;
         pub c: i15;
+        _: 10;
       }
+
+      _: 10;
     }
   }
 
   cond_bit_field! {
     struct IfElse {
       pub a: bool;
+      _: 10;
 
       if a {
+        _: 10;
         pub b: u3;
+        _: 10;
         pub c: i15;
+        _: 10;
       } else {
+        _: 10;
         pub d: i4;
+        _: 10;
         pub e: u10;
+        _: 10;
       }
 
+      _: 10;
       pub z: bool;
     }
   }
@@ -177,15 +194,23 @@ mod tests {
   cond_bit_field! {
     struct IfElseIf {
       pub a: bool;
+      _: 10;
 
       if a {
+        _: 10;
         pub b: u3;
+        _: 10;
         pub c: i15;
+        _: 10;
       } else if !a {
+        _: 10;
         pub d: i4;
+        _: 10;
         pub e: u10;
+        _: 10;
       }
 
+      _: 10;
       pub z: bool;
     }
   }
@@ -193,18 +218,28 @@ mod tests {
   cond_bit_field! {
     struct IfElseIfElse {
       pub a: bool;
+      _: 10;
 
       if a {
+        _: 10;
         pub b: u3;
+        _: 10;
         pub c: i15;
+        _: 10;
       } else if !a {
+        _: 10;
         pub d: i4;
+        _: 10;
         pub e: u10;
+        _: 10;
       } else {
         pub f: bool;
+        _: 10;
         pub g: i33;
+        _: 10;
       }
 
+      _: 10;
       pub z: bool;
     }
   }
@@ -213,16 +248,23 @@ mod tests {
     struct IfElseIfElseIf {
       pub a: bool;
       pub b: bool;
+      _: 10;
 
       if a {
         pub c: u3;
+        _: 10;
         pub d: i15;
+        _: 10;
       } else if !a {
+        _: 10;
         pub e: i4;
+        _: 10;
         pub f: u10;
       } else if b {
         pub g: bool;
+        _: 10;
         pub h: i33;
+        _: 10;
       }
 
       pub z: bool;
@@ -233,20 +275,38 @@ mod tests {
     struct RecursiveIf {
       pub a: bool;
       pub b: bool;
+      _: 10;
 
       if a {
         pub c: u3;
+        _: 10;
         pub d: i15;
+        _: 10;
 
         if !a {
           pub e: i4;
+          _: 10;
           pub f: u10;
+          _: 10;
         } else if b {
           pub g: bool;
+          _: 10;
           pub h: i33;
+          _: 10;
         }
 
+        _: 10;
         pub z: bool;
+      }
+    }
+  }
+
+  cond_bit_field! {
+    struct EmptyForLoop {
+      if true {
+        for _ in 0..100 {
+
+        }
       }
     }
   }

@@ -3,8 +3,11 @@ extern crate proc_macro;
 use quote::quote;
 use syn::parse_macro_input;
 
+mod block;
 mod data;
+mod r#match;
 mod stmt;
+mod syn_private;
 mod traits;
 mod ty;
 

@@ -2,10 +2,13 @@ use core::ops::Deref;
 
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::{format_ident, quote_spanned, ToTokens, TokenStreamExt};
-use syn::{parse::{Parse, ParseStream},
-          spanned::Spanned,
-          Error, PathArguments, Result, TypePath};
+use syn::{
+  parse::{Parse, ParseStream},
+  spanned::Spanned,
+  Error, PathArguments, Result, TypePath,
+};
 
+#[derive(Clone)]
 pub enum Type {
   Bool { span: Span },
   Number { signed: bool, size: u8, span: Span },
@@ -88,58 +91,51 @@ impl ToTokens for Type {
   }
 }
 
-pub enum VecType {
+#[derive(Clone)]
+pub enum ComplexType {
   Simple(Type),
-  Vec(Box<OptionType>),
+  Vec(Box<ComplexType>),
+  Option(Box<ComplexType>),
 }
 
-impl Deref for VecType {
+impl ComplexType {
+  pub fn collapse(&self) -> ComplexType {
+    match self {
+      Self::Simple(_) => self.clone(),
+      Self::Vec(inner) => Self::Vec(Box::new(inner.collapse())),
+      Self::Option(inner) => {
+        let mut inner = inner;
+        loop {
+          match &**inner {
+            Self::Option(inner2) => inner = inner2,
+            _ => break Self::Option(Box::new(inner.collapse())),
+          }
+        }
+      }
+    }
+  }
+}
+
+impl Deref for ComplexType {
   type Target = Type;
 
   fn deref(&self) -> &Self::Target {
     match self {
-      Self::Simple(ty) => &ty,
-      Self::Vec(item) => &item,
+      Self::Simple(inner) => &inner,
+      Self::Vec(inner) => &**inner,
+      Self::Option(inner) => &**inner,
     }
   }
 }
 
-impl ToTokens for VecType {
+impl ToTokens for ComplexType {
   fn to_tokens(&self, tokens: &mut TokenStream) {
-    match self {
-      Self::Simple(ty) => ty.to_tokens(tokens),
-      Self::Vec(item) => tokens.extend(quote_spanned!(item.span()=> std::vec::Vec<#item>)),
-    }
-  }
-}
-
-pub enum OptionType {
-  Simple(VecType),
-  Option(VecType),
-}
-
-impl OptionType {
-  pub fn from_type(ty: Type) -> Self {
-    Self::Simple(VecType::Simple(ty))
-  }
-}
-
-impl Deref for OptionType {
-  type Target = Type;
-
-  fn deref(&self) -> &Self::Target {
-    match self {
-      Self::Simple(ty) => &ty,
-      Self::Option(option) => &option,
-    }
-  }
-}
-
-impl ToTokens for OptionType {
-  fn to_tokens(&self, tokens: &mut TokenStream) {
-    match self {
-      Self::Simple(ty) => ty.to_tokens(tokens),
-      Self::Option(item) => tokens.extend(quote_spanned!(item.span()=> std::option::Option<#item>)),
+    match self.collapse() {
+      Self::Simple(inner) => inner.to_tokens(tokens),
+      Self::Vec(inner) => tokens.extend(quote_spanned!(inner.span()=> std::vec::Vec<#inner>)),
+      Self::Option(inner) => {
+        tokens.extend(quote_spanned!(inner.span()=> std::option::Option<#inner>))
+      }
     }
   }
 }
