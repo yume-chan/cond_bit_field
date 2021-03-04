@@ -10,7 +10,6 @@ repository = "https://github.com/yume-chan/cond_bit_field"
 version = "0.1.0"
 
 [dependencies]
-thiserror = "1.0"
-
-[dev-dependencies]
 cond_bit_field = {path = "../cond_bit_field"}
+num-traits = "0.2"
+thiserror = "1.0"

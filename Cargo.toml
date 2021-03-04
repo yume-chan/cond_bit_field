@@ -1,0 +1,6 @@
+[workspace]
+members = [
+  "cond_bit_field",
+  "cond_bit_stream",
+  "h264_nalu",
+]

@@ -1,15 +1,13 @@
 [package]
 authors = ["Simon Chan <cnsimonchan@live.com>"]
-categories = ["encoding"]
-description = "Parse H.264 NAL units"
 edition = "2018"
-keywords = ["h264"]
-license = "MIT"
-name = "h264-nalu"
-repository = "https://github.com/yume-chan/cond_bit_field"
+name = "output"
 version = "0.1.0"
 
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
 [dependencies]
+cond_bit_field = {path = "../cond_bit_field"}
 cond_bit_stream = {path = "../cond_bit_stream"}
 num-derive = "0.3"
 num-traits = "0.2"

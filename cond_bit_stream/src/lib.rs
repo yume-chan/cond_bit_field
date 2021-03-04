@@ -1,5 +1,7 @@
-use std::{io::Read, slice};
+use std::{convert::TryInto, io::Read, mem::size_of, slice};
 use thiserror::Error;
+
+pub use cond_bit_field::*;
 
 #[derive(Error, Debug)]
 pub enum BitReaderError {
@@ -24,15 +26,7 @@ pub trait SizedBitField {
 pub trait BitRead {
   fn skip(&mut self, size: u8) -> Result<()>;
 
-  fn read_bit(&mut self) -> Result<u8>;
-
-  fn read_bits(&mut self, num: u8) -> Result<u64> {
-    let mut result = 0u64;
-    for _ in 0..num {
-      result = result << 1 | self.read_bit()? as u64;
-    }
-    Ok(result)
-  }
+  fn read_bit(&mut self) -> Result<bool>;
 
   fn read<T: BitField>(&mut self) -> Result<T>
   where
@@ -41,13 +35,62 @@ pub trait BitRead {
     T::read(self)
   }
 
-  fn read_sized<T: SizedBitField>(&mut self, size: u8) -> Result<T>
+  fn read_sized<T: SizedBitField, S: TryInto<u8>>(&mut self, size: S) -> Result<T>
   where
     Self: Sized,
   {
-    T::read_sized(self, size)
+    T::read_sized(self, size.try_into().or(Err(BitReaderError::TooLarge))?)
   }
 }
+
+macro_rules! impl_read_sized_for_signed {
+  ($ty: ty) => {
+    impl SizedBitField for $ty {
+      fn read_sized(reader: &mut impl BitRead, size: u8) -> Result<Self> {
+        let size: u8 = size.try_into().or(Err(BitReaderError::TooLarge))?;
+        if size as usize > size_of::<$ty>() {
+          return Err(BitReaderError::TooLarge);
+        }
+
+        let mut result: Self = if reader.read_bit()? { -1 } else { 0 };
+        for _ in 0..(size - 1) {
+          result = result << 1 | Self::from(reader.read_bit()?);
+        }
+
+        Ok(result)
+      }
+    }
+  };
+}
+
+impl_read_sized_for_signed!(i8);
+impl_read_sized_for_signed!(i16);
+impl_read_sized_for_signed!(i32);
+impl_read_sized_for_signed!(i64);
+
+macro_rules! impl_read_sized_for_unsigned {
+  ($ty: ty) => {
+    impl SizedBitField for $ty {
+      fn read_sized(reader: &mut impl BitRead, size: u8) -> Result<Self> {
+        if size as usize > size_of::<$ty>() {
+          return Err(BitReaderError::TooLarge);
+        }
+
+        let mut result: Self = 0;
+        for _ in 0..size {
+          result = result << 1 | Self::from(reader.read_bit()?);
+        }
+
+        Ok(result)
+      }
+    }
+  };
+}
+
+impl_read_sized_for_unsigned!(u8);
+impl_read_sized_for_unsigned!(u16);
+impl_read_sized_for_unsigned!(u32);
+impl_read_sized_for_unsigned!(u64);
 
 pub struct BitReader<R> {
   inner: R,
@@ -85,7 +128,7 @@ impl<R: Read> BitRead for BitReader<R> {
     Ok(())
   }
 
-  fn read_bit(&mut self) -> Result<u8> {
+  fn read_bit(&mut self) -> Result<bool> {
     if self.pos == 8 {
       self
         .inner
@@ -96,38 +139,13 @@ impl<R: Read> BitRead for BitReader<R> {
 
     let value = (self.buf >> (7 - self.pos)) & 0b1;
     self.pos += 1;
-    Ok(value)
+    Ok(value == 1)
   }
 }
 
-macro_rules! impl_read_sized_into_for_prim {
-  ($ty:ty, $size:expr) => {
-    impl SizedBitField for $ty {
-      fn read_sized(reader: &mut impl BitRead, size: u8) -> Result<Self> {
-        if size > $size {
-          return Err(BitReaderError::TooLarge);
-        }
-
-        Ok(reader.read_bits(size)? as $ty)
-      }
-    }
-  };
-}
-
-impl_read_sized_into_for_prim!(u8, 8);
-impl_read_sized_into_for_prim!(i8, 8);
-impl_read_sized_into_for_prim!(u16, 16);
-impl_read_sized_into_for_prim!(i16, 16);
-impl_read_sized_into_for_prim!(u32, 32);
-impl_read_sized_into_for_prim!(i32, 32);
-impl_read_sized_into_for_prim!(u64, 64);
-impl_read_sized_into_for_prim!(i64, 64);
-impl_read_sized_into_for_prim!(u128, 128);
-impl_read_sized_into_for_prim!(i128, 128);
-
 #[cfg(test)]
 mod tests {
-  use crate::*;
+  use crate as cond_bit_stream;
   use cond_bit_field::cond_bit_field;
 
   cond_bit_field! {

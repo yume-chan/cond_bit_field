@@ -2,17 +2,13 @@ use std::iter;
 
 use proc_macro2::{Ident, TokenStream};
 use quote::{quote, ToTokens, TokenStreamExt};
-use syn::{
-  parse::{Parse, ParseStream},
-  token, Attribute, LitInt, Result, Token, Visibility,
-};
+use syn::{parenthesized,
+          parse::{Parse, ParseStream},
+          parse2, token, Attribute, LitInt, Result, Token, Visibility};
 
-use crate::{
-  block::Block,
-  stmt::Stmt,
-  traits::{FieldIter, FlatFields},
-  ty::{ComplexType, Type},
-};
+use crate::{block::ExprBlock,
+            traits::{FieldIter, FlatFields},
+            ty::{ComplexType, Type}};
 
 pub struct Skip {
   pub underscore_token: token::Underscore,
@@ -48,10 +44,26 @@ impl ToTokens for Skip {
   }
 }
 
+pub struct SizeAttributeArgs {
+  expr: syn::Expr,
+}
+
+impl Parse for SizeAttributeArgs {
+  fn parse(input: ParseStream) -> Result<Self> {
+    let content;
+    parenthesized!(content in input);
+    Ok(Self {
+      expr: content.call(syn::Expr::parse_without_eager_brace)?,
+    })
+  }
+}
+
 #[derive(Clone)]
 pub struct Field {
   /// Attributes tagged on the field.
   pub attrs: Vec<Attribute>,
+
+  pub size: Option<syn::Expr>,
 
   /// Visibility of the field.
   pub vis: Visibility,
@@ -69,10 +81,51 @@ pub struct Field {
   pub semicolon_token: token::Semi,
 }
 
+impl Field {
+  fn to_initializer(&self) -> TokenStream {
+    match self.size {
+      Some(ref size) => quote! {reader.read_sized(#size)?},
+      None => match *self.ty {
+        Type::Bool { .. } => quote! {reader.read_bit()?},
+        Type::Number { size, .. } => quote! {reader.read_sized(#size)?},
+        Type::Struct(_) => {
+          quote! {reader.read()?}
+        }
+      },
+    }
+  }
+}
+
 impl Parse for Field {
   fn parse(input: ParseStream) -> Result<Self> {
+    let attrs: Vec<Attribute> = input.call(Attribute::parse_outer)?;
+    let mut size_attribute: Option<Attribute> = None;
+    let attrs = attrs
+      .into_iter()
+      .filter(|x| {
+        let segments = &x.path.segments;
+        if segments.len() == 1 {
+          let first = segments.first().unwrap();
+          if first.ident.to_string() == "size" {
+            size_attribute = Some(x.clone());
+            return false;
+          }
+        }
+        true
+      })
+      .collect::<Vec<_>>();
+
+    let size = match size_attribute {
+      Some(attribute) => {
+        let args = parse2::<SizeAttributeArgs>(attribute.tokens)?;
+        Some(args.expr)
+      }
+      None => None,
+    };
+
     Ok(Field {
-      attrs: input.call(Attribute::parse_outer)?,
+      attrs: attrs,
+      size,
       vis: input.parse()?,
       ident: input.parse()?,
       colon_token: input.parse()?,
@@ -97,16 +150,9 @@ impl ToTokens for Field {
       ..
     } = self;
 
-    let parser = match **ty {
-      Type::Bool { .. } => quote! {reader.read_bit()? == 1},
-      Type::Number { size, .. } => quote! {reader.read_sized(#size)?},
-      Type::Struct(_) => {
-        quote! {reader.read()?}
-      }
-    };
-
     let ty = &**ty;
-    tokens.extend(quote! {let #ident: #ty = #parser #semicolon_token});
+    let initializer = self.to_initializer();
+    tokens.extend(quote! {let #ident: #ty = #initializer #semicolon_token});
   }
 }
 
@@ -115,7 +161,7 @@ pub struct Struct {
   pub vis: Visibility,
   pub struct_token: Token![struct],
   pub ident: Ident,
-  pub fields: Block,
+  pub fields: ExprBlock,
 }
 
 impl Parse for Struct {
@@ -125,15 +171,7 @@ impl Parse for Struct {
       vis: input.parse()?,
       struct_token: input.parse()?,
       ident: input.parse()?,
-      fields: {
-        let mut fields: Block = input.parse()?;
-        for stmt in fields.stmts.iter_mut() {
-          if let Stmt::If(expr_if) = stmt {
-            expr_if.is_at_root = true;
-          }
-        }
-        fields
-      },
+      fields: input.parse()?,
     })
   }
 }
@@ -172,8 +210,8 @@ impl ToTokens for Struct {
     let initializers = &fields.stmts;
     let field_names = fields.flat_fields().map(|x| x.ident);
     tokens.extend(quote! {
-      impl BitField for #ident {
-        fn read(reader: &mut impl BitRead) -> Result<Self> {
+      impl cond_bit_stream::BitField for #ident {
+        fn read(reader: &mut impl cond_bit_stream::BitRead) -> cond_bit_stream::Result<Self> {
           #(#initializers)*
           Ok(#ident {
             #(#field_names),*

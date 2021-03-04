@@ -1,12 +1,10 @@
 use core::ops::Deref;
 
 use proc_macro2::{Ident, Span, TokenStream};
-use quote::{format_ident, quote_spanned, ToTokens, TokenStreamExt};
-use syn::{
-  parse::{Parse, ParseStream},
-  spanned::Spanned,
-  Error, PathArguments, Result, TypePath,
-};
+use quote::{format_ident, quote, quote_spanned, ToTokens, TokenStreamExt};
+use syn::{parse::{Parse, ParseStream},
+          spanned::Spanned,
+          Error, PathArguments, Result, TypePath};
 
 #[derive(Clone)]
 pub enum Type {
@@ -112,6 +110,25 @@ impl ComplexType {
           }
         }
       }
+    }
+  }
+
+  pub fn to_default(&self, tokens: &mut TokenStream) {
+    match self {
+      Self::Simple(_) => tokens.extend(quote! {std::default::default()}),
+      Self::Vec(_) => tokens.extend(quote! {std::vec::Vec::new()}),
+      Self::Option(_) => tokens.extend(quote! {None}),
+    }
+  }
+
+  pub fn to_backup(&self, tokens: &mut TokenStream, src: &Ident, dest: &Ident) {
+    match self {
+      Self::Simple(_) => tokens.extend(quote! {#dest = #src;}),
+      Self::Vec(_) => tokens.extend(quote! {#dest.push(#src);}),
+      Self::Option(inner) => match &**inner {
+        Self::Option(_) => tokens.extend(quote! {#dest = #src;}),
+        _ => tokens.extend(quote! {#dest = Some(#src);}),
+      },
     }
   }
 }
