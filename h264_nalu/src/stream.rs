@@ -1,4 +1,5 @@
 use thiserror::Error;
+use wasm_bindgen::prelude::*;
 
 #[derive(Error, Debug)]
 pub enum NalUnitStreamError {
@@ -10,37 +11,44 @@ pub enum NalUnitStreamError {
   TooManyZeros,
 }
 
-pub struct NalUnitStream<'a> {
-  byte_stream: &'a mut [u8],
-  started: bool,
+#[wasm_bindgen]
+pub struct NalUnitStream {
+  byte_stream: Box<[u8]>,
+  start: usize,
 }
 
-impl<'a> NalUnitStream<'a> {
-  pub fn new(byte_stream: &'a mut [u8]) -> Self {
+#[wasm_bindgen]
+impl NalUnitStream {
+  pub fn new(byte_stream: Box<[u8]>) -> Self {
     NalUnitStream {
       byte_stream,
-      started: false,
+      start: 0,
     }
   }
 
-  fn extract_nalu(&mut self, end: usize) -> &'a [u8] {
-    let byte_stream = std::mem::replace(&mut self.byte_stream, &mut []);
-    let (left, right) = byte_stream.split_at_mut(end);
-    self.byte_stream = right;
-    return left;
+  fn create_error(err: NalUnitStreamError) -> JsValue {
+    JsValue::from(format!("{:?}", err))
   }
 
-  pub fn next(&mut self) -> Result<Option<&'a [u8]>, NalUnitStreamError> {
-    if self.byte_stream.len() == 0 {
+  fn extract_nalu(&mut self, end: usize) -> Box<[u8]> {
+    let slice = self.byte_stream[self.start..end]
+      .to_vec()
+      .into_boxed_slice();
+    self.start = end;
+    slice
+  }
+
+  pub fn next(&mut self) -> Result<Option<Box<[u8]>>, JsValue> {
+    if self.byte_stream.len() == self.start {
       return Ok(None);
     }
 
-    let mut write_index = 0;
+    let mut write_index = self.start;
 
     let mut zero_count = 0;
     let mut in_emulation = false;
 
-    for i in 0..self.byte_stream.len() {
+    for i in self.start..self.byte_stream.len() {
       let byte = self.byte_stream[i];
 
       self.byte_stream[write_index] = byte;
@@ -48,7 +56,7 @@ impl<'a> NalUnitStream<'a> {
 
       if in_emulation {
         if byte > 0x03 {
-          return Err(NalUnitStreamError::InvalidEmulation);
+          return Err(Self::create_error(NalUnitStreamError::InvalidEmulation));
         }
 
         in_emulation = false;
@@ -62,14 +70,13 @@ impl<'a> NalUnitStream<'a> {
 
       let zero_count = std::mem::replace(&mut zero_count, 0);
 
-      if !self.started {
+      if self.start == 0 {
         if zero_count >= 3 && byte == 0x01 {
-          self.started = true;
-          write_index = 0;
+          self.start = write_index;
           continue;
         }
 
-        return Err(NalUnitStreamError::StartCodeNotFound);
+        return Err(Self::create_error(NalUnitStreamError::StartCodeNotFound));
       }
 
       if zero_count < 2 {
@@ -81,11 +88,11 @@ impl<'a> NalUnitStream<'a> {
       }
 
       if zero_count > 2 {
-        return Err(NalUnitStreamError::TooManyZeros);
+        return Err(Self::create_error(NalUnitStreamError::TooManyZeros));
       }
 
       match byte {
-        0x02 => return Err(NalUnitStreamError::InvalidEmulation),
+        0x02 => return Err(Self::create_error(NalUnitStreamError::InvalidEmulation)),
         0x03 => {
           write_index -= 1;
           in_emulation = true;
@@ -94,12 +101,12 @@ impl<'a> NalUnitStream<'a> {
       }
     }
 
-    if !self.started {
-      return Err(NalUnitStreamError::StartCodeNotFound);
+    if self.start == 0 {
+      return Err(Self::create_error(NalUnitStreamError::StartCodeNotFound));
     }
 
     if in_emulation {
-      return Err(NalUnitStreamError::InvalidEmulation);
+      return Err(Self::create_error(NalUnitStreamError::InvalidEmulation));
     }
 
     Ok(Some(self.extract_nalu(self.byte_stream.len())))
