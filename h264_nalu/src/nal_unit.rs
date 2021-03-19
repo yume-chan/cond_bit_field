@@ -4,7 +4,7 @@ use serde::Serialize;
 use crate::{PictureParameterSet, SequenceParameterSet};
 
 #[non_exhaustive]
-#[derive(Clone, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 pub enum NalUnitPayload {
   PictureParameterSet(PictureParameterSet),
   SequenceParameterSet(SequenceParameterSet),
@@ -13,7 +13,7 @@ pub enum NalUnitPayload {
 
 cond_bit_field! {
   // 7.3.1 NAL unit syntax
-  #[derive(Clone, Copy, Serialize)]
+  #[derive(Clone, Copy, Debug, Serialize)]
   pub struct NalUnitHeader {
     _: 1;
 
@@ -41,7 +41,7 @@ cond_bit_field! {
   }
 }
 
-#[derive(Clone, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 pub struct NalUnit {
   pub header: NalUnitHeader,
   pub payload: NalUnitPayload,

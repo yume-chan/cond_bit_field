@@ -1,11 +1,11 @@
 use cond_bit_stream::cond_bit_field;
 use serde::Serialize;
 
-use crate::UnsignedExpGolombCode;
+use crate::{SignedExpGolombCode, UnsignedExpGolombCode};
 
 // 7.3.2.2 Picture parameter set RBSP syntax
 cond_bit_field! {
-  #[derive(Clone, Serialize)]
+  #[derive(Clone, Debug, Serialize)]
   pub struct PictureParameterSet {
     pub pic_parameter_set_id: UnsignedExpGolombCode;
     pub seq_parameter_set_id: UnsignedExpGolombCode;
@@ -48,9 +48,9 @@ cond_bit_field! {
 
     pub weighted_pred_flag: bool;
     pub weighted_bipred_idc: u2;
-    pub pic_init_qp_minus26: UnsignedExpGolombCode;
-    pub pic_init_qs_minus26: UnsignedExpGolombCode;
-    pub chroma_qp_index_offset: UnsignedExpGolombCode;
+    pub pic_init_qp_minus26: SignedExpGolombCode;
+    pub pic_init_qs_minus26: SignedExpGolombCode;
+    pub chroma_qp_index_offset: SignedExpGolombCode;
 
     pub deblocking_filter_control_present_flag: bool;
     pub constrained_intra_pred_flag: bool;

@@ -19,7 +19,7 @@ impl BitField for UnsignedExpGolombCode {
     }
 
     Ok(UnsignedExpGolombCode(
-      1 << length | reader.read_sized::<u64, _>(length)? - 1,
+      (1 << length | reader.read_sized::<u64, _>(length)?) - 1,
     ))
   }
 }

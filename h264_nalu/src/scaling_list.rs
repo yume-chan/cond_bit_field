@@ -2,7 +2,7 @@ use crate::SignedExpGolombCode;
 use cond_bit_stream::{BitRead, Result, SizedBitField};
 use serde::Serialize;
 
-#[derive(Clone, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 pub struct ScalingList {
   pub list: Vec<u8>,
   pub use_default_scaling_matrix_flag: bool,

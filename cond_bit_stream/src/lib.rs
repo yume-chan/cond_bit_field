@@ -121,19 +121,22 @@ impl<R: Read> BitRead for BitReader<R> {
     self.pos == 8
   }
 
-  fn skip(&mut self, mut bit_count: u8) -> Result<()> {
-    if self.pos + bit_count > 7 {
-      bit_count -= 7 - self.pos;
-    }
+  // pos     bit_count    out_pos    read_bytes
+  // 1       1            2          0
+  // 1       7            0          1
+  // 1       8            1          1
 
-    let bytes = (bit_count as f32 / 8f32).ceil() as usize;
+  fn skip(&mut self, bit_count: u8) -> Result<()> {
+    self.pos += bit_count;
+
+    let bytes = (self.pos as f32 / 8f32).floor() as usize;
     let mut buf = vec![0; bytes];
     self
       .inner
       .read_exact(&mut buf)
       .or(Err(BitReaderError::NotEnoughData))?;
 
-    self.pos = bit_count % 8;
+    self.pos = self.pos % 8;
     self.buf = buf[bytes - 1];
     Ok(())
   }

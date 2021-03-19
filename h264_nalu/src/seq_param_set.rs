@@ -5,7 +5,7 @@ use crate::{ScalingList, SignedExpGolombCode, UnsignedExpGolombCode};
 
 // 7.3.2.1.1 Sequence parameter set data syntax
 cond_bit_field! {
-  #[derive(Clone, Serialize)]
+  #[derive(Clone, Debug, Serialize)]
   pub struct SequenceParameterSet {
     pub profile_idc: u8;
 
@@ -85,7 +85,106 @@ cond_bit_field! {
 
     pub vui_parameters_present_flag: bool;
     if vui_parameters_present_flag {
-      // TODO
+      pub yuv_parameters: YuvParameters;
     }
+  }
+}
+
+#[allow(non_upper_case_globals)]
+const Extended_SAR: u8 = 255;
+
+// E.1.1 VUI parameters syntax
+cond_bit_field! {
+  #[derive(Clone, Debug, Serialize)]
+  pub struct YuvParameters {
+    pub aspect_ratio_info_present_flag: bool;
+
+    if aspect_ratio_info_present_flag {
+      pub aspect_ratio_idc: u8;
+
+      if aspect_ratio_idc == Extended_SAR {
+        pub sar_width: u16;
+        pub sar_height: u16;
+      }
+    }
+
+    pub overscan_info_present_flag: bool;
+    if overscan_info_present_flag {
+      pub overscan_appropriate_flag: bool;
+    }
+
+    pub video_signal_type_present_flag: bool;
+    if video_signal_type_present_flag {
+      pub video_format: u3;
+      pub video_full_range_flag: bool;
+      pub colour_description_present_flag: bool;
+
+      if colour_description_present_flag {
+        pub colour_primaries: u8;
+        pub transfer_characteristics: u8;
+        pub matrix_coefficients: u8;
+      }
+    }
+
+    pub chroma_loc_info_present_flag: bool;
+    if chroma_loc_info_present_flag {
+      pub chroma_sample_loc_type_top_field: UnsignedExpGolombCode;
+      pub chroma_sample_loc_type_bottom_field: UnsignedExpGolombCode;
+    }
+
+    pub timing_info_present_flag: bool;
+    if timing_info_present_flag {
+      pub num_units_in_tick: u32;
+      pub time_scale: u32;
+      pub fixed_frame_rate_flag: bool;
+    }
+
+    pub nal_hrd_parameters_present_flag: bool;
+    if nal_hrd_parameters_present_flag {
+      pub nal_hrd_parameters: HrdParameters;
+    }
+
+    pub vcl_hrd_parameters_present_flag: bool;
+    if vcl_hrd_parameters_present_flag {
+      pub vcl_hrd_parameters: HrdParameters;
+    }
+
+    if nal_hrd_parameters_present_flag || vcl_hrd_parameters_present_flag {
+      pub low_delay_hrd_flag: bool;
+    }
+
+    pub pic_struct_present_flag: bool;
+
+    pub bitstream_restriction_flag: bool;
+    if bitstream_restriction_flag {
+      pub motion_vectors_over_pic_boundaries_flag: bool;
+      pub max_bytes_per_pic_denom: UnsignedExpGolombCode;
+      pub max_bits_per_mb_denom: UnsignedExpGolombCode;
+      pub log2_max_mv_length_horizontal: UnsignedExpGolombCode;
+      pub log2_max_mv_length_vertical: UnsignedExpGolombCode;
+      pub max_num_reorder_frames: UnsignedExpGolombCode;
+      pub max_dec_frame_buffering: UnsignedExpGolombCode;
+    }
+  }
+}
+
+// E.1.2 HRD parameters syntax
+cond_bit_field! {
+  #[derive(Clone, Debug, Serialize)]
+  pub struct HrdParameters {
+    pub cpb_cnt_minus1: UnsignedExpGolombCode;
+    pub bit_rate_scale: u4;
+    pub cpb_size_scale: u4;
+
+    for _ in 0..cpb_cnt_minus1.0 {
+      pub bit_rate_value_minus1: UnsignedExpGolombCode;
+      pub cpb_size_value_minus1: UnsignedExpGolombCode;
+      pub cbr_flag: bool;
+    }
+
+    pub initial_cpb_removal_delay_length_minus1: u5;
+    pub cpb_removal_delay_length_minus1: u5;
+    pub dpb_output_delay_length_minus1: u5;
+    pub time_offset_length: u5;
   }
 }
