@@ -1,8 +1,11 @@
-use crate::{ScalingList, SignedExpGolombCode, UnsignedExpGolombCode};
 use cond_bit_stream::cond_bit_field;
+use serde::Serialize;
+
+use crate::{ScalingList, SignedExpGolombCode, UnsignedExpGolombCode};
 
 // 7.3.2.1.1 Sequence parameter set data syntax
 cond_bit_field! {
+  #[derive(Clone, Serialize)]
   pub struct SequenceParameterSet {
     pub profile_idc: u8;
 
@@ -24,7 +27,7 @@ cond_bit_field! {
       profile_idc == 134 || profile_idc == 135 {
       pub chroma_format_idc: UnsignedExpGolombCode;
 
-      if chroma_format_idc.0 == 3 {
+      if chroma_format_idc == 3 {
         pub separate_colour_plane_flag: bool;
       }
 
@@ -39,7 +42,7 @@ cond_bit_field! {
           pub scaling_list_4x4: ScalingList;
         }
 
-        for _ in 0..(if chroma_format_idc.0 != 3 { 2 } else { 6 }){
+        for _ in 0..(if chroma_format_idc != 3 { 2 } else { 6 }){
           #[size(64)]
           pub scaling_list_8x8: ScalingList;
         }

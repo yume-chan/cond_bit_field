@@ -1,0 +1,19 @@
+{
+    "cSpell.words": [
+      "Golomb",
+      "RBSP",
+      "Unshadow",
+      "bindgen",
+      "bipred",
+      "cond",
+      "deblocking",
+      "luma",
+      "nalu",
+      "qpprime",
+      "serde",
+      "thiserror",
+      "wasm"
+    ],
+    "editor.tabSize": 2,
+    "editor.detectIndentation": false
+}

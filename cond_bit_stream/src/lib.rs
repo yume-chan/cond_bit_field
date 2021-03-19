@@ -7,7 +7,7 @@ pub use cond_bit_field::*;
 pub enum BitReaderError {
   #[error("Not enough data")]
   NotEnoughData,
-  #[error("Request size too large for current type")]
+  #[error("Requested size too large for current type")]
   TooLarge,
 }
 
@@ -24,7 +24,9 @@ pub trait SizedBitField {
 }
 
 pub trait BitRead {
-  fn skip(&mut self, size: u8) -> Result<()>;
+  fn byte_aligned(&self) -> bool;
+
+  fn skip(&mut self, bit_count: u8) -> Result<()>;
 
   fn read_bit(&mut self) -> Result<bool>;
 
@@ -35,11 +37,14 @@ pub trait BitRead {
     T::read(self)
   }
 
-  fn read_sized<T: SizedBitField, S: TryInto<u8>>(&mut self, size: S) -> Result<T>
+  fn read_sized<T: SizedBitField, S: TryInto<u8>>(&mut self, bit_count: S) -> Result<T>
   where
     Self: Sized,
   {
-    T::read_sized(self, size.try_into().or(Err(BitReaderError::TooLarge))?)
+    T::read_sized(
+      self,
+      bit_count.try_into().or(Err(BitReaderError::TooLarge))?,
+    )
   }
 }
 
@@ -48,10 +53,11 @@ macro_rules! impl_read_sized_for_signed {
     impl SizedBitField for $ty {
       fn read_sized(reader: &mut impl BitRead, size: u8) -> Result<Self> {
         let size: u8 = size.try_into().or(Err(BitReaderError::TooLarge))?;
-        if size as usize > size_of::<$ty>() {
+        if size as usize > size_of::<$ty>() * 8 {
           return Err(BitReaderError::TooLarge);
         }
 
+        // -1: all bits are `1`
         let mut result: Self = if reader.read_bit()? { -1 } else { 0 };
         for _ in 0..(size - 1) {
           result = result << 1 | Self::from(reader.read_bit()?);
@@ -72,7 +78,7 @@ macro_rules! impl_read_sized_for_unsigned {
   ($ty: ty) => {
     impl SizedBitField for $ty {
       fn read_sized(reader: &mut impl BitRead, size: u8) -> Result<Self> {
-        if size as usize > size_of::<$ty>() {
+        if size as usize > size_of::<$ty>() * 8 {
           return Err(BitReaderError::TooLarge);
         }
 
@@ -111,19 +117,23 @@ impl<R: Read> BitReader<R> {
 }
 
 impl<R: Read> BitRead for BitReader<R> {
-  fn skip(&mut self, mut size: u8) -> Result<()> {
-    if self.pos + size > 7 {
-      size -= 7 - self.pos;
+  fn byte_aligned(&self) -> bool {
+    self.pos == 8
+  }
+
+  fn skip(&mut self, mut bit_count: u8) -> Result<()> {
+    if self.pos + bit_count > 7 {
+      bit_count -= 7 - self.pos;
     }
 
-    let bytes = (size as f32 / 8f32).ceil() as usize;
+    let bytes = (bit_count as f32 / 8f32).ceil() as usize;
     let mut buf = vec![0; bytes];
     self
       .inner
       .read_exact(&mut buf)
       .or(Err(BitReaderError::NotEnoughData))?;
 
-    self.pos = size % 8;
+    self.pos = bit_count % 8;
     self.buf = buf[bytes - 1];
     Ok(())
   }

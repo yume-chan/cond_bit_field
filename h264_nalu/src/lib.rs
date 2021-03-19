@@ -10,6 +10,9 @@ pub use seq_param_set::*;
 mod pic_param_set;
 pub use pic_param_set::*;
 
+mod nal_unit;
+pub use nal_unit::*;
+
 mod stream;
 pub use stream::*;
 

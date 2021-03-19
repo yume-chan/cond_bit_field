@@ -1,8 +1,11 @@
-use crate::UnsignedExpGolombCode;
 use cond_bit_stream::cond_bit_field;
+use serde::Serialize;
+
+use crate::UnsignedExpGolombCode;
 
 // 7.3.2.2 Picture parameter set RBSP syntax
 cond_bit_field! {
+  #[derive(Clone, Serialize)]
   pub struct PictureParameterSet {
     pub pic_parameter_set_id: UnsignedExpGolombCode;
     pub seq_parameter_set_id: UnsignedExpGolombCode;
@@ -10,7 +13,7 @@ cond_bit_field! {
     pub bottom_field_pic_order_in_frame_present_flag: bool;
     pub num_slice_groups_minus1: UnsignedExpGolombCode;
 
-    if num_slice_groups_minus1.0 > 0 {
+    if num_slice_groups_minus1 > 0 {
       pub slice_group_map_type: UnsignedExpGolombCode;
 
       match slice_group_map_type.0 {

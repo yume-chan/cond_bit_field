@@ -1,5 +1,8 @@
+use cond_bit_stream::{BitRead, BitReader};
 use thiserror::Error;
 use wasm_bindgen::prelude::*;
+
+use crate::NalUnit;
 
 #[derive(Error, Debug)]
 pub enum NalUnitStreamError {
@@ -19,6 +22,7 @@ pub struct NalUnitStream {
 
 #[wasm_bindgen]
 impl NalUnitStream {
+  #[wasm_bindgen(constructor)]
   pub fn new(byte_stream: Box<[u8]>) -> Self {
     NalUnitStream {
       byte_stream,
@@ -26,21 +30,22 @@ impl NalUnitStream {
     }
   }
 
-  fn create_error(err: NalUnitStreamError) -> JsValue {
-    JsValue::from(format!("{:?}", err))
+  fn create_error<T>(err: impl std::fmt::Display) -> Result<T, JsValue> {
+    Err(js_sys::Error::new(&*err.to_string()).into())
   }
 
-  fn extract_nalu(&mut self, end: usize) -> Box<[u8]> {
-    let slice = self.byte_stream[self.start..end]
-      .to_vec()
-      .into_boxed_slice();
+  fn extract_nalu(&mut self, end: usize) -> Result<JsValue, JsValue> {
+    let slice = &self.byte_stream[self.start..end];
     self.start = end;
-    slice
+    match BitReader::new(slice).read::<NalUnit>() {
+      Ok(value) => serde_wasm_bindgen::to_value(&value).map_err(|err| err.into()),
+      Err(err) => Self::create_error(err),
+    }
   }
 
-  pub fn next(&mut self) -> Result<Option<Box<[u8]>>, JsValue> {
+  pub fn next(&mut self) -> Result<JsValue, JsValue> {
     if self.byte_stream.len() == self.start {
-      return Ok(None);
+      return Ok(JsValue::UNDEFINED);
     }
 
     let mut write_index = self.start;
@@ -56,7 +61,7 @@ impl NalUnitStream {
 
       if in_emulation {
         if byte > 0x03 {
-          return Err(Self::create_error(NalUnitStreamError::InvalidEmulation));
+          return Self::create_error(NalUnitStreamError::InvalidEmulation);
         }
 
         in_emulation = false;
@@ -76,7 +81,7 @@ impl NalUnitStream {
           continue;
         }
 
-        return Err(Self::create_error(NalUnitStreamError::StartCodeNotFound));
+        return Self::create_error(NalUnitStreamError::StartCodeNotFound);
       }
 
       if zero_count < 2 {
@@ -84,15 +89,15 @@ impl NalUnitStream {
       }
 
       if byte == 0x01 {
-        return Ok(Some(self.extract_nalu(write_index - zero_count - 1)));
+        return self.extract_nalu(write_index - zero_count - 1);
       }
 
       if zero_count > 2 {
-        return Err(Self::create_error(NalUnitStreamError::TooManyZeros));
+        return Self::create_error(NalUnitStreamError::TooManyZeros);
       }
 
       match byte {
-        0x02 => return Err(Self::create_error(NalUnitStreamError::InvalidEmulation)),
+        0x02 => return Self::create_error(NalUnitStreamError::InvalidEmulation),
         0x03 => {
           write_index -= 1;
           in_emulation = true;
@@ -102,13 +107,13 @@ impl NalUnitStream {
     }
 
     if self.start == 0 {
-      return Err(Self::create_error(NalUnitStreamError::StartCodeNotFound));
+      return Self::create_error(NalUnitStreamError::StartCodeNotFound);
     }
 
     if in_emulation {
-      return Err(Self::create_error(NalUnitStreamError::InvalidEmulation));
+      return Self::create_error(NalUnitStreamError::InvalidEmulation);
     }
 
-    Ok(Some(self.extract_nalu(self.byte_stream.len())))
+    self.extract_nalu(self.byte_stream.len())
   }
 }
