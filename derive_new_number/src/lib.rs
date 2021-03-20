@@ -3,6 +3,7 @@ extern crate proc_macro;
 use quote::quote;
 use syn::{parse_macro_input, Data, DeriveInput, Error, Fields};
 
+/// Implements mathematics operations for a number new type
 #[proc_macro_derive(NewNumber)]
 pub fn new_number(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let derive = parse_macro_input!(input as DeriveInput);

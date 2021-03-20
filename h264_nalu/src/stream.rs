@@ -13,7 +13,7 @@ pub enum NalUnitStreamError {
     #[error("Stream has more than 3 continuous zero bytes")]
     TooManyZeros,
     #[error("Error when decoding payload")]
-    PayloadError(BitStreamError),
+    PayloadError(#[from] BitStreamError),
 }
 
 #[wasm_bindgen]
@@ -136,7 +136,7 @@ impl NalUnitStream {
         println!("{}, {}, {}", self.start, end, slice.len());
         match BitStream::new(slice).read::<NalUnit>() {
             Ok(value) => Ok(Some(value)),
-            Err(err) => Err(NalUnitStreamError::PayloadError(err)),
+            Err(err) => Err(err.into()),
         }
     }
 

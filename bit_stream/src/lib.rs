@@ -3,26 +3,34 @@ use thiserror::Error;
 
 pub use cond_bit_field::*;
 
+/// The error type for `BitStream`'s read operations
 #[derive(Error, Debug)]
 pub enum BitStreamError {
+    /// The `BitStream` has not enough bits for the requested size.
     #[error("Not enough data")]
     NotEnoughData,
+    /// The requested size doesn't fit into the result type.
     #[error("Requested size too large for result type")]
     TooLarge,
 }
 
+/// The `BitField` trait defines how to `read` from a `BitStream`
 pub trait BitField {
+    /// Read from a `BitStream`.
     fn read(stream: &mut BitStream) -> Result<Self>
     where
         Self: Sized;
 }
 
+/// The `SizedBitField` trait can have dynamic size
 pub trait SizedBitField {
+    /// Read from a `BitStream`.
     fn read_sized(stream: &mut BitStream, size: u8) -> Result<Self>
     where
         Self: Sized;
 }
 
+/// A stream that can be read bit by bit
 pub struct BitStream<'a> {
     data: &'a [u8],
     offset: usize,
@@ -33,6 +41,7 @@ pub struct BitStream<'a> {
 pub type Result<T> = std::result::Result<T, BitStreamError>;
 
 impl<'a> BitStream<'a> {
+    /// Creates a new `BitStream`.
     pub fn new(slice: &'a [u8]) -> Self {
         let buf = if slice.len() != 0 { slice[0] } else { 0 };
         Self {
@@ -43,14 +52,17 @@ impl<'a> BitStream<'a> {
         }
     }
 
+    /// Returns whether the `BitStream` is currently byte aligned
     pub fn byte_aligned(&self) -> bool {
         self.pos == 0 || self.pos == 8
     }
 
+    /// Returns the remaining bit count in this stream.
     pub fn remaining(&self) -> usize {
         (self.data.len() - self.offset) * 8 - self.pos as usize
     }
 
+    /// Skips and throw away `bit_count` bits.
     pub fn skip(&mut self, bit_count: usize) -> Result<()> {
         let pos_overflow = self.pos as usize + bit_count;
 
@@ -64,6 +76,9 @@ impl<'a> BitStream<'a> {
         Ok(())
     }
 
+    /// Reads the next bit.
+    ///
+    /// Returns `true` if the bit is `1`, `false` for `0`
     pub fn read_bit(&mut self) -> Result<bool> {
         if self.pos == 8 {
             self.offset += 1;
@@ -79,14 +94,19 @@ impl<'a> BitStream<'a> {
         Ok(value == 1)
     }
 
+    /// Reads a `BitField`.
     pub fn read<T: BitField>(&mut self) -> Result<T> {
         T::read(self)
     }
 
+    /// Reads a `SizedBitField`
     pub fn read_sized<T: SizedBitField, S: TryInto<u8>>(&mut self, size: S) -> Result<T> {
         T::read_sized(self, size.try_into().or(Err(BitStreamError::TooLarge))?)
     }
 
+    /// Reads all remaining bytes
+    ///
+    /// The stream must be byte aligned when `read_all` was called.
     pub fn read_all(&mut self) -> Box<[u8]> {
         if self.pos == 8 {
             self.offset += 1;
@@ -128,6 +148,8 @@ impl_read_sized_for_signed!(i8);
 impl_read_sized_for_signed!(i16);
 impl_read_sized_for_signed!(i32);
 impl_read_sized_for_signed!(i64);
+impl_read_sized_for_signed!(i128);
+impl_read_sized_for_signed!(isize);
 
 macro_rules! impl_read_sized_for_unsigned {
     ($ty: ty) => {
@@ -152,6 +174,8 @@ impl_read_sized_for_unsigned!(u8);
 impl_read_sized_for_unsigned!(u16);
 impl_read_sized_for_unsigned!(u32);
 impl_read_sized_for_unsigned!(u64);
+impl_read_sized_for_unsigned!(u128);
+impl_read_sized_for_unsigned!(usize);
 
 #[cfg(test)]
 mod tests {
