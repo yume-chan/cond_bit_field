@@ -1,7 +1,7 @@
 [workspace]
 members = [
   "cond_bit_field",
-  "cond_bit_stream",
+  "bit_stream",
   "h264_nalu",
-  "derive_new_number"
+  "derive_new_number",
 ]

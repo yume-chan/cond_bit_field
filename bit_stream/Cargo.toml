@@ -1,15 +1,14 @@
 [package]
 authors = ["Simon Chan <cnsimonchan@live.com>"]
 categories = ["data-structures", "encoding"]
-description = "Read bits from Read"
+description = "A bit reader"
 edition = "2018"
 keywords = ["bitfield"]
 license = "MIT"
-name = "cond_bit_stream"
+name = "bit_stream"
 repository = "https://github.com/yume-chan/cond_bit_field"
 version = "0.1.0"
 
 [dependencies]
 cond_bit_field = {path = "../cond_bit_field"}
-num-traits = "0.2"
 thiserror = "1.0"
