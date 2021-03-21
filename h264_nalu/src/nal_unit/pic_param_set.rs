@@ -1,10 +1,14 @@
-use crate::nal_unit::{ScalingList, SignedExpGolombCode, UnsignedExpGolombCode};
+use crate::{nal_unit::{ScalingList, SignedExpGolombCode, UnsignedExpGolombCode},
+            Decoder};
 use bit_stream::cond_bit_field;
 use serde::Serialize;
 
-// 7.3.2.2 Picture parameter set RBSP syntax
 cond_bit_field! {
+    /// pic_parameter_set_rbsp
+    ///
+    /// § 7.3.2.2 Picture parameter set RBSP syntax
     #[derive(Clone, Debug, Serialize)]
+    #[extra_args(decoder: &Decoder)]
     pub struct PictureParameterSet {
         pub pic_parameter_set_id: UnsignedExpGolombCode;
         pub seq_parameter_set_id: UnsignedExpGolombCode;
@@ -66,11 +70,11 @@ cond_bit_field! {
                 }
 
                 if transform_8x8_mode_flag {
-                // TODO
-                // for _ in 0..(if chroma_format_idc != 3 { 2 } else { 6 }){
-                //   #[size(64)]
-                //   pub scaling_list_8x8: ScalingList;
-                // }
+                    let seq_parameter_set = decoder.find_sequence_parameter_set(seq_parameter_set_id).unwrap();
+                    for _ in 0..(if seq_parameter_set.chroma_format_idc != Some(UnsignedExpGolombCode(3)) { 2 } else { 6 }){
+                        #[size(64)]
+                        pub scaling_list_8x8: ScalingList;
+                    }
                 }
             }
         }

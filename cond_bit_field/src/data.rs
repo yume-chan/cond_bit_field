@@ -3,8 +3,9 @@ use std::iter;
 use proc_macro2::{Ident, TokenStream};
 use quote::{quote, ToTokens, TokenStreamExt};
 use syn::{parenthesized,
-          parse::{Parse, ParseStream},
-          parse2, token, Attribute, LitInt, Result, Token, Visibility};
+          parse::{Parse, ParseStream, Parser},
+          punctuated::Punctuated,
+          token, Attribute, LitInt, PatType, Result, Token, Visibility};
 
 use crate::{block::ExprBlock,
             traits::{FieldIter, FlatFields},
@@ -44,17 +45,33 @@ impl ToTokens for Skip {
     }
 }
 
-pub struct SizeAttributeArgs {
-    expr: syn::Expr,
+pub struct ParseParen<T> {
+    pub paren_token: token::Paren,
+    pub content: T,
 }
 
-impl Parse for SizeAttributeArgs {
+impl<T: Parse> Parse for ParseParen<T> {
     fn parse(input: ParseStream) -> Result<Self> {
         let content;
-        parenthesized!(content in input);
+        let paren_token = parenthesized!(content in input);
         Ok(Self {
-            expr: content.call(syn::Expr::parse_without_eager_brace)?,
+            paren_token,
+            content: content.parse()?,
         })
+    }
+}
+
+impl<T> ParseParen<T> {
+    fn parse_with<F: FnOnce(ParseStream) -> Result<T>>(input: TokenStream, f: F) -> Result<Self> {
+        let func = |input: ParseStream| -> Result<Self> {
+            let content;
+            let paren_token = parenthesized!(content in input);
+            Ok(Self {
+                paren_token,
+                content: f(&content)?,
+            })
+        };
+        Parser::parse2(func, input)
     }
 }
 
@@ -64,6 +81,10 @@ pub struct Field {
     pub attrs: Vec<Attribute>,
 
     pub size: Option<syn::Expr>,
+
+    pub default: Option<syn::Expr>,
+
+    pub extra_args: Option<Punctuated<syn::Expr, token::Comma>>,
 
     /// Visibility of the field.
     pub vis: Visibility,
@@ -82,34 +103,47 @@ pub struct Field {
 }
 
 impl Field {
-    fn to_initializer(&self) -> TokenStream {
+    pub fn into_option(mut self) -> Self {
+        if self.default == None {
+            self.ty = ComplexType::Option(Box::new(self.ty));
+        }
+        self
+    }
+
+    pub fn to_initializer(&self) -> TokenStream {
         match self.size {
             Some(ref size) => quote! {stream.read_sized(#size)?},
-            None => match *self.ty {
+            None => match self.ty.inner_most() {
                 Type::Bool { .. } => quote! {stream.read_bit()?},
                 Type::Number { size, .. } => quote! {stream.read_sized(#size)?},
-                Type::Struct(_) => {
-                    quote! {stream.read()?}
-                }
+                Type::Struct(ty) => match &self.extra_args {
+                    Some(extra_args) => quote! {#ty::read(stream, #extra_args)?},
+                    None => quote! {stream.read()?},
+                },
             },
         }
     }
-}
 
-impl Parse for Field {
-    fn parse(input: ParseStream) -> Result<Self> {
-        let attrs: Vec<Attribute> = input.call(Attribute::parse_outer)?;
+    pub fn process_fake_attrs(&mut self) -> Result<()> {
+        let attrs = std::mem::take(&mut self.attrs);
+
         let mut size_attribute: Option<Attribute> = None;
+        let mut default_attribute: Option<Attribute> = None;
+        let mut extra_args_attribute: Option<Attribute> = None;
+
         let attrs = attrs
             .into_iter()
             .filter(|x| {
                 let segments = &x.path.segments;
                 if segments.len() == 1 {
                     let first = segments.first().unwrap();
-                    if first.ident.to_string() == "size" {
-                        size_attribute = Some(x.clone());
-                        return false;
+                    match first.ident.to_string().as_str() {
+                        "size" => size_attribute = Some(x.clone()),
+                        "default" => default_attribute = Some(x.clone()),
+                        "extra_args" => extra_args_attribute = Some(x.clone()),
+                        _ => return true,
                     }
+                    return false;
                 }
                 true
             })
@@ -117,15 +151,51 @@ impl Parse for Field {
 
         let size = match size_attribute {
             Some(attribute) => {
-                let args = parse2::<SizeAttributeArgs>(attribute.tokens)?;
-                Some(args.expr)
+                let args =
+                    ParseParen::parse_with(attribute.tokens, syn::Expr::parse_without_eager_brace)?;
+                Some(args.content)
             }
             None => None,
         };
 
+        let default = match default_attribute {
+            Some(attribute) => {
+                let args =
+                    ParseParen::parse_with(attribute.tokens, syn::Expr::parse_without_eager_brace)?;
+                Some(args.content)
+            }
+            None => None,
+        };
+
+        let extra_args = match extra_args_attribute {
+            Some(attribute) => {
+                let args = ParseParen::parse_with(attribute.tokens, |input| {
+                    Punctuated::<syn::Expr, token::Comma>::parse_terminated_with(
+                        input,
+                        syn::Expr::parse_without_eager_brace,
+                    )
+                })?;
+                Some(args.content)
+            }
+            None => None,
+        };
+
+        self.attrs = attrs;
+        self.size = size;
+        self.default = default;
+        self.extra_args = extra_args;
+
+        Ok(())
+    }
+}
+
+impl Parse for Field {
+    fn parse(input: ParseStream) -> Result<Self> {
         Ok(Field {
-            attrs: attrs,
-            size,
+            attrs: Vec::new(),
+            size: None,
+            default: None,
+            extra_args: None,
             vis: input.parse()?,
             ident: input.parse()?,
             colon_token: input.parse()?,
@@ -150,7 +220,7 @@ impl ToTokens for Field {
             ..
         } = self;
 
-        let ty = &**ty;
+        let ty = ty.inner_most();
         let initializer = self.to_initializer();
         tokens.extend(quote! {let #ident: #ty = #initializer #semicolon_token});
     }
@@ -158,6 +228,7 @@ impl ToTokens for Field {
 
 pub struct Struct {
     pub attrs: Vec<Attribute>,
+    pub extra_args: Option<Punctuated<PatType, token::Comma>>,
     pub vis: Visibility,
     pub struct_token: Token![struct],
     pub ident: Ident,
@@ -166,8 +237,43 @@ pub struct Struct {
 
 impl Parse for Struct {
     fn parse(input: ParseStream) -> Result<Self> {
+        let attrs = input.call(Attribute::parse_outer)?;
+        let mut extra_args_attribute: Option<Attribute> = None;
+        let attrs = attrs
+            .into_iter()
+            .filter(|x| {
+                let segments = &x.path.segments;
+                if segments.len() == 1 {
+                    let first = segments.first().unwrap();
+                    if first.ident.to_string() == "extra_args" {
+                        extra_args_attribute = Some(x.clone());
+                        return false;
+                    }
+                }
+                true
+            })
+            .collect::<Vec<_>>();
+
+        let extra_args = match extra_args_attribute {
+            Some(attribute) => {
+                let args = ParseParen::parse_with(attribute.tokens, |input| {
+                    Punctuated::<PatType, token::Comma>::parse_terminated_with(input, |input| {
+                        Ok(PatType {
+                            attrs: Vec::new(),
+                            pat: input.parse()?,
+                            colon_token: input.parse()?,
+                            ty: input.parse()?,
+                        })
+                    })
+                })?;
+                Some(args.content)
+            }
+            None => None,
+        };
+
         Ok(Struct {
-            attrs: input.call(Attribute::parse_outer)?,
+            attrs,
+            extra_args,
             vis: input.parse()?,
             struct_token: input.parse()?,
             ident: input.parse()?,
@@ -180,6 +286,7 @@ impl ToTokens for Struct {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         let Self {
             attrs,
+            extra_args,
             vis,
             struct_token,
             ident,
@@ -209,15 +316,32 @@ impl ToTokens for Struct {
 
         let initializers = &fields.stmts;
         let field_names = fields.flat_fields().map(|x| x.ident);
-        tokens.extend(quote! {
-          impl bit_stream::BitField for #ident {
-            fn read(stream: &mut bit_stream::BitStream) -> bit_stream::Result<Self> {
-              #(#initializers)*
-              Ok(Self {
-                #(#field_names),*
-              })
+
+        match extra_args {
+            Some(extra_args) => {
+                tokens.extend(quote! {
+                    impl #ident {
+                        pub fn read(stream: &mut bit_stream::BitStream, #extra_args) -> bit_stream::Result<Self> {
+                            #(#initializers)*
+                            Ok(Self {
+                                #(#field_names),*
+                            })
+                        }
+                    }
+                });
             }
-          }
-        });
+            None => {
+                tokens.extend(quote! {
+                    impl bit_stream::BitField for #ident {
+                        fn read(stream: &mut bit_stream::BitStream) -> bit_stream::Result<Self> {
+                            #(#initializers)*
+                            Ok(Self {
+                                #(#field_names),*
+                            })
+                        }
+                    }
+                });
+            }
+        };
     }
 }

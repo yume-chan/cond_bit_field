@@ -2,11 +2,10 @@ use bit_stream::{BitField, BitStream, Result};
 use derive_new_number::NewNumber;
 use serde::Serialize;
 
-#[derive(Clone, Copy, Debug, NewNumber, PartialEq, Serialize)]
+/// § 9.1 Parsing process for Exp-Golomb codes
+#[derive(Clone, Copy, Debug, Eq, Hash, NewNumber, PartialEq, Serialize)]
 pub struct UnsignedExpGolombCode(pub u64);
 
-// 7.2 Specification of syntax functions, categories, and descriptors
-// 9.1 Parsing process for Exp-Golomb codes
 impl BitField for UnsignedExpGolombCode {
     fn read(stream: &mut BitStream) -> Result<Self> {
         let mut length = 0;
@@ -24,7 +23,8 @@ impl BitField for UnsignedExpGolombCode {
     }
 }
 
-#[derive(Clone, Copy, Debug, NewNumber, PartialEq, Serialize)]
+/// § 9.1.1 Mapping process for signed Exp-Golomb codes
+#[derive(Clone, Copy, Debug, Eq, Hash, NewNumber, PartialEq, Serialize)]
 pub struct SignedExpGolombCode(pub i64);
 
 impl BitField for SignedExpGolombCode {

@@ -7,10 +7,10 @@ use syn::{braced,
           token, Attribute, Pat, Result, Token};
 
 use crate::{block::Unshadow,
+            data::Field,
             expr::Expr,
             syn_private,
-            traits::{FieldIter, FlatFields},
-            ty::ComplexType};
+            traits::{FieldIter, FlatFields}};
 
 pub struct Arm {
     pub attrs: Vec<Attribute>,
@@ -86,11 +86,7 @@ impl Parse for Arm {
 
 impl FlatFields for Arm {
     fn flat_fields(&self) -> FieldIter {
-        Box::new(self.body.flat_fields().map(|x| {
-            let mut x = x;
-            x.ty = ComplexType::Option(Box::new(x.ty.clone()));
-            x
-        }))
+        Box::new(self.body.flat_fields().map(Field::into_option))
     }
 }
 

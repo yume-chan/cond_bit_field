@@ -2,8 +2,19 @@ use crate::nal_unit::{ScalingList, SignedExpGolombCode, UnsignedExpGolombCode};
 use bit_stream::cond_bit_field;
 use serde::Serialize;
 
-// 7.3.2.1.1 Sequence parameter set data syntax
 cond_bit_field! {
+    /// A _syntax structure containing syntax elements_ that apply to zero or more
+    /// _layer representations_ with the dependency_id _syntax element_ equal to 0
+    /// and the quality_id _syntax element_ equal to 0 as determined by the content of a
+    /// seq_parameter_set_id _syntax element_ found in the _picture parameter set_ referred to by
+    /// the pic_parameter_set_id _syntax element_ found in each _slice header_ of _I_, _P_, and
+    /// _B slices_.
+    ///
+    /// § 3.115 picture parameter set
+    ///
+    /// seq_parameter_set_rbsp
+    ///
+    /// § 7.3.2.1.1 Sequence parameter set data syntax
     #[derive(Clone, Debug, Serialize)]
     pub struct SequenceParameterSet {
         pub profile_idc: u8;
@@ -27,6 +38,21 @@ cond_bit_field! {
             pub chroma_format_idc: UnsignedExpGolombCode;
 
             if chroma_format_idc == 3 {
+                /// equal to 1 specifies that the three colour components
+                /// of the 4:4:4 chroma format are coded separately.
+                /// separate_colour_plane_flag equal to 0 specifies that the colour components
+                /// are not coded separately.
+                /// When separate_colour_plane_flag is not present,
+                /// it shall be inferred to be equal to 0.
+                /// When separate_colour_plane_flag is equal to 1, the primary coded picture
+                /// consists of three separate components, each of which consists of coded
+                /// samples of one colour plane (Y, Cb or Cr) that each use the monochrome coding
+                /// syntax.
+                /// In this case, each colour plane is associated with a specific
+                /// colour_plane_id value.
+                ///
+                /// § 7.4.2.1.1 Sequence parameter set data semantics
+                #[default(false)]
                 pub separate_colour_plane_flag: bool;
             }
 
@@ -70,6 +96,14 @@ cond_bit_field! {
         pub pic_height_in_map_units_minus1: UnsignedExpGolombCode;
         pub frame_mbs_only_flag: bool;
         if !frame_mbs_only_flag {
+            /// equal to 0 specifies no switching between frame and field macroblocks
+            /// within a picture. mb_adaptive_frame_field_flag equal to 1 specifies the possible
+            /// use of switching between frame and field macroblocks within frames.
+            /// When mb_adaptive_frame_field_flag is not present,
+            /// it shall be inferred to be equal to 0.
+            ///
+            /// § 7.4.2.1.1 Sequence parameter set data semantics
+            #[default(false)]
             pub mb_adaptive_frame_field_flag: bool;
         }
 
@@ -167,8 +201,8 @@ cond_bit_field! {
     }
 }
 
-// E.1.2 HRD parameters syntax
 cond_bit_field! {
+    /// § E.1.2 HRD parameters syntax
     #[derive(Clone, Debug, Serialize)]
     pub struct HrdParameters {
         pub cpb_cnt_minus1: UnsignedExpGolombCode;

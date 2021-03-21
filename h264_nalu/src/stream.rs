@@ -2,7 +2,7 @@ use bit_stream::{BitStream, BitStreamError};
 use thiserror::Error;
 use wasm_bindgen::prelude::*;
 
-use crate::NalUnit;
+use crate::{decoder::Decoder, NalUnit, NalUnitPayload};
 
 #[derive(Error, Debug)]
 pub enum NalUnitStreamError {
@@ -131,16 +131,26 @@ impl NalUnitStream {
         }
     }
 
-    fn extract_nalu(&mut self, end: usize) -> Result<Option<NalUnit>, NalUnitStreamError> {
+    fn extract_nalu(
+        &mut self,
+        end: usize,
+        decoder: &mut Decoder,
+    ) -> Result<Option<NalUnit>, NalUnitStreamError> {
         let slice = &self.byte_stream[self.start..end];
-        println!("{}, {}, {}", self.start, end, slice.len());
-        match BitStream::new(slice).read::<NalUnit>() {
-            Ok(value) => Ok(Some(value)),
-            Err(err) => Err(err.into()),
+        let unit = NalUnit::read(&mut BitStream::new(slice), decoder)?;
+        match &unit.payload {
+            NalUnitPayload::PictureParameterSet(pic_parameter_set) => {
+                decoder.set_picture_parameter_set(pic_parameter_set.clone())
+            }
+            NalUnitPayload::SequenceParameterSet(sequence_parameter_set) => {
+                decoder.set_sequence_parameter_set(sequence_parameter_set.clone());
+            }
+            _ => {}
         }
+        Ok(Some(unit))
     }
 
-    pub fn next(&mut self) -> Result<Option<NalUnit>, NalUnitStreamError> {
+    pub fn next(&mut self, decoder: &mut Decoder) -> Result<Option<NalUnit>, NalUnitStreamError> {
         if self.byte_stream.len() == self.start {
             return Ok(None);
         }
@@ -186,7 +196,7 @@ impl NalUnitStream {
             }
 
             if byte == 0x01 {
-                let result = self.extract_nalu(write_index - zero_count - 1);
+                let result = self.extract_nalu(write_index - zero_count - 1, decoder);
                 self.start = i + 1;
                 return result;
             }
@@ -213,13 +223,13 @@ impl NalUnitStream {
             return Err(NalUnitStreamError::InvalidEmulation);
         }
 
-        self.extract_nalu(self.byte_stream.len())
+        self.extract_nalu(self.byte_stream.len(), decoder)
     }
 }
 
 #[cfg(test)]
 mod test {
-    use crate::NalUnitStream;
+    use crate::{Decoder, NalUnitStream};
 
     #[test]
     fn test() {
@@ -228,8 +238,9 @@ mod test {
             1, 104, 206, 6, 242,
         ];
         let mut stream = NalUnitStream::new(data.into_boxed_slice());
-        println!("{:?}", stream.next());
-        println!("{:?}", stream.next());
+        let mut decoder = Decoder::new();
+        println!("{:?}", stream.next(&mut decoder));
+        println!("{:?}", stream.next(&mut decoder));
 
         assert_eq!(true, false);
     }

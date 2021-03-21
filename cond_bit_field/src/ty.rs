@@ -1,5 +1,3 @@
-use core::ops::Deref;
-
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::{format_ident, quote, quote_spanned, ToTokens, TokenStreamExt};
 use syn::{parse::{Parse, ParseStream},
@@ -97,19 +95,27 @@ pub enum ComplexType {
 }
 
 impl ComplexType {
-    pub fn collapse(&self) -> ComplexType {
+    pub fn flatten(&self) -> ComplexType {
         match self {
             Self::Simple(_) => self.clone(),
-            Self::Vec(inner) => Self::Vec(Box::new(inner.collapse())),
+            Self::Vec(inner) => Self::Vec(Box::new(inner.flatten())),
             Self::Option(inner) => {
                 let mut inner = inner;
                 loop {
                     match &**inner {
                         Self::Option(inner2) => inner = inner2,
-                        _ => break Self::Option(Box::new(inner.collapse())),
+                        _ => break Self::Option(Box::new(inner.flatten())),
                     }
                 }
             }
+        }
+    }
+
+    pub fn inner_most(&self) -> &Type {
+        match self {
+            Self::Simple(inner) => inner,
+            Self::Vec(inner) => inner.inner_most(),
+            Self::Option(inner) => inner.inner_most(),
         }
     }
 
@@ -133,21 +139,9 @@ impl ComplexType {
     }
 }
 
-impl Deref for ComplexType {
-    type Target = Type;
-
-    fn deref(&self) -> &Self::Target {
-        match self {
-            Self::Simple(inner) => &inner,
-            Self::Vec(inner) => &**inner,
-            Self::Option(inner) => &**inner,
-        }
-    }
-}
-
 impl ToTokens for ComplexType {
     fn to_tokens(&self, tokens: &mut TokenStream) {
-        match self.collapse() {
+        match self.flatten() {
             Self::Simple(inner) => inner.to_tokens(tokens),
             Self::Vec(inner) => tokens.extend(quote_spanned!(inner.span()=> std::vec::Vec<#inner>)),
             Self::Option(inner) => {

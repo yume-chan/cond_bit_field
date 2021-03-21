@@ -3,5 +3,6 @@ members = [
   "cond_bit_field",
   "bit_stream",
   "h264_nalu",
+  "array_fill",
   "derive_new_number",
 ]

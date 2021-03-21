@@ -5,13 +5,14 @@ use quote::{format_ident, quote, ToTokens, TokenStreamExt};
 use rand::{distributions::Alphanumeric, thread_rng, Rng};
 use syn::{braced,
           parse::{Parse, ParseStream},
-          token, Result};
+          token, Attribute, Result};
 
 use crate::{data::Field,
             expr::Expr,
             traits::{FieldIter, FlatFields}};
 
 pub struct ExprBlock {
+    pub attrs: Vec<Attribute>,
     pub brace_token: token::Brace,
     pub stmts: Vec<Expr>,
 }
@@ -44,6 +45,7 @@ impl Parse for ExprBlock {
     fn parse(input: ParseStream) -> Result<Self> {
         let content;
         Ok(Self {
+            attrs: Vec::new(),
             brace_token: braced!(content in input),
             stmts: content.call(Self::parse_within)?,
         })
@@ -95,7 +97,12 @@ impl Unshadow {
               #[allow(non_snake_case)]
               let mut #ident: #ty =
             });
-            ty.to_default(tokens);
+
+            match &field.default {
+                Some(default) => default.to_tokens(tokens),
+                None => ty.to_default(tokens),
+            }
+
             tokens.extend(quote! {;});
         }
     }

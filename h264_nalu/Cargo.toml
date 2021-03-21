@@ -16,6 +16,7 @@ crate-type = ["cdylib"]
 lto = true
 
 [dependencies]
+array_fill = {path = "../array_fill"}
 bit_stream = {path = "../bit_stream"}
 derive_new_number = {path = "../derive_new_number"}
 js-sys = "0.3"

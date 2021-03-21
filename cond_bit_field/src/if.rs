@@ -4,8 +4,8 @@ use syn::{parse::{Parse, ParseStream},
           token, Attribute, Result, Token};
 
 use crate::{block::{ExprBlock, Unshadow},
-            traits::{FieldIter, FlatFields},
-            ty::ComplexType};
+            data::Field,
+            traits::{FieldIter, FlatFields}};
 
 pub enum ElseIf {
     Block(ExprBlock),
@@ -30,10 +30,7 @@ impl FlatFields for ElseIf {
         // All `if`s in `if {} else if {} else if {}` are treated as in the same level
         // So don't wrap another `ComplexType::Option` around them
         match self {
-            Self::Block(block) => Box::new(block.flat_fields().map(|mut x| {
-                x.ty = ComplexType::Option(Box::new(x.ty.clone()));
-                x
-            })),
+            Self::Block(block) => Box::new(block.flat_fields().map(Field::into_option)),
             Self::If(expr_if) => expr_if.flat_fields(),
         }
     }
@@ -67,11 +64,9 @@ impl Parse for ExprIf {
 
 impl FlatFields for ExprIf {
     fn flat_fields(&self) -> FieldIter {
-        let mut iterators: Vec<FieldIter> =
-            vec![Box::new(self.then_branch.flat_fields().map(|mut x| {
-                x.ty = ComplexType::Option(Box::new(x.ty.clone()));
-                x
-            }))];
+        let mut iterators: Vec<FieldIter> = vec![Box::new(
+            self.then_branch.flat_fields().map(Field::into_option),
+        )];
 
         if let Some((_, expr)) = &self.else_branch {
             iterators.push(expr.flat_fields());
@@ -83,7 +78,6 @@ impl FlatFields for ExprIf {
 
 impl ToTokens for ExprIf {
     fn to_tokens(&self, tokens: &mut TokenStream) {
-        #[allow(unused_mut)]
         let mut expr_if = self;
 
         let unshadow = Unshadow::new(self);

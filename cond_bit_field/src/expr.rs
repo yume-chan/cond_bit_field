@@ -1,3 +1,5 @@
+use std::iter;
+
 use proc_macro2::TokenStream;
 use quote::{ToTokens, TokenStreamExt};
 use syn::{braced,
@@ -17,12 +19,25 @@ pub enum Expr {
     Field(Field),
     ForLoop(ExprForLoop),
     If(ExprIf),
+    Local(syn::Local),
     Match(ExprMatch),
     Skip(Skip),
 }
 
-impl Parse for Expr {
-    fn parse(input: ParseStream) -> Result<Self> {
+impl Expr {
+    pub fn replace_attrs(&mut self, new: Vec<Attribute>) -> Vec<Attribute> {
+        match self {
+            Expr::Local(syn::Local { attrs, .. })
+            | Expr::If(ExprIf { attrs, .. })
+            | Expr::ForLoop(ExprForLoop { attrs, .. })
+            | Expr::Match(ExprMatch { attrs, .. })
+            | Expr::Block(ExprBlock { attrs, .. })
+            | Expr::Field(Field { attrs, .. }) => std::mem::replace(attrs, new),
+            Self::Skip(_) => Vec::new(),
+        }
+    }
+
+    pub fn unary_expr(input: ParseStream) -> Result<Self> {
         if input.peek(token::Brace) {
             return Ok(Self::Block(input.parse()?));
         }
@@ -33,6 +48,14 @@ impl Parse for Expr {
 
         if input.peek(token::If) {
             return Ok(Self::If(input.parse()?));
+        }
+
+        if input.peek(token::Let) {
+            let local = match syn::Stmt::parse(input)? {
+                syn::Stmt::Local(local) => local,
+                _ => unreachable!(),
+            };
+            return Ok(Self::Local(local));
         }
 
         if input.peek(token::Match) {
@@ -47,6 +70,20 @@ impl Parse for Expr {
     }
 }
 
+impl Parse for Expr {
+    fn parse(input: ParseStream) -> Result<Self> {
+        let mut attrs = input.call(Attribute::parse_outer)?;
+        let mut atom = Self::unary_expr(input)?;
+        attrs.extend(atom.replace_attrs(Vec::new()));
+        atom.replace_attrs(attrs);
+        match atom {
+            Self::Field(ref mut field) => field.process_fake_attrs()?,
+            _ => {}
+        };
+        Ok(atom)
+    }
+}
+
 impl FlatFields for Expr {
     fn flat_fields(&self) -> FieldIter {
         match self {
@@ -54,6 +91,7 @@ impl FlatFields for Expr {
             Self::Field(field) => field.flat_fields(),
             Self::ForLoop(expr_for_loop) => expr_for_loop.flat_fields(),
             Self::If(expr_if) => expr_if.flat_fields(),
+            Self::Local(..) => Box::new(iter::empty()),
             Self::Match(expr_match) => expr_match.flat_fields(),
             Self::Skip(skip) => skip.flat_fields(),
         }
@@ -67,6 +105,7 @@ impl ToTokens for Expr {
             Self::Field(field) => field.to_tokens(tokens),
             Self::ForLoop(expr_for_loop) => expr_for_loop.to_tokens(tokens),
             Self::If(expr_if) => expr_if.to_tokens(tokens),
+            Self::Local(expr_let) => expr_let.to_tokens(tokens),
             Self::Match(expr_match) => expr_match.to_tokens(tokens),
             Self::Skip(skip) => skip.to_tokens(tokens),
         }
@@ -99,7 +138,11 @@ impl Parse for ExprForLoop {
         let inner_attrs = content.call(Attribute::parse_inner)?;
         let stmts = content.call(ExprBlock::parse_within)?;
 
-        let body = ExprBlock { brace_token, stmts };
+        let body = ExprBlock {
+            attrs: Vec::new(),
+            brace_token,
+            stmts,
+        };
 
         Ok(ExprForLoop {
             attrs: syn_private::private::attrs(outer_attrs, inner_attrs),
