@@ -137,7 +137,8 @@ impl NalUnitStream {
         decoder: &mut Decoder,
     ) -> Result<Option<NalUnit>, NalUnitStreamError> {
         let slice = &self.byte_stream[self.start..end];
-        let unit = NalUnit::read(&mut BitStream::new(slice), decoder)?;
+        let mut stream = BitStream::new(slice);
+        let unit: NalUnit = stream.read(decoder as &Decoder)?;
         match &unit.payload {
             NalUnitPayload::PictureParameterSet(pic_parameter_set) => {
                 decoder.set_picture_parameter_set(pic_parameter_set.clone())

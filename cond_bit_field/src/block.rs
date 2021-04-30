@@ -98,9 +98,10 @@ impl Unshadow {
               let mut #ident: #ty =
             });
 
-            match &field.default {
-                Some(default) => default.to_tokens(tokens),
-                None => ty.to_default(tokens),
+            if let Some(default) = &field.default {
+                default.to_tokens(tokens);
+            } else {
+                ty.to_default(tokens);
             }
 
             tokens.extend(quote! {;});

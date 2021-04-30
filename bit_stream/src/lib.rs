@@ -1,4 +1,4 @@
-use std::{convert::TryInto, mem::size_of};
+use std::mem::size_of;
 use thiserror::Error;
 
 pub use cond_bit_field::*;
@@ -15,20 +15,39 @@ pub enum BitStreamError {
 }
 
 /// The `BitField` trait defines how to `read` from a `BitStream`
-pub trait BitField {
+pub trait BitField<'a> {
+    type Args;
+
     /// Read from a `BitStream`.
-    fn read(stream: &mut BitStream) -> Result<Self>
+    fn read(stream: &mut BitStream, args: Self::Args) -> Result<Self>
     where
         Self: Sized;
 }
 
-/// The `SizedBitField` trait can have dynamic size
-pub trait SizedBitField {
-    /// Read from a `BitStream`.
-    fn read_sized(stream: &mut BitStream, size: u8) -> Result<Self>
-    where
-        Self: Sized;
-}
+// trait FooTrait {
+//     type Arg;
+
+//     fn foo(arg: Self::Arg) -> Self
+//     where
+//         Self: Sized;
+// }
+
+// struct Foo {
+//     pub value: u8,
+// }
+
+// impl FooTrait for Foo {
+//     type Arg = &'static u8;
+
+//     fn foo<'a>(args: &'a u8) -> Self
+//     where
+//         Self: Sized,
+//     {
+//         Self {
+//             value: args.clone(),
+//         }
+//     }
+// }
 
 /// A stream that can be read bit by bit
 pub struct BitStream<'a> {
@@ -95,13 +114,8 @@ impl<'a> BitStream<'a> {
     }
 
     /// Reads a `BitField`.
-    pub fn read<T: BitField>(&mut self) -> Result<T> {
-        T::read(self)
-    }
-
-    /// Reads a `SizedBitField`
-    pub fn read_sized<T: SizedBitField, S: TryInto<u8>>(&mut self, size: S) -> Result<T> {
-        T::read_sized(self, size.try_into().or(Err(BitStreamError::TooLarge))?)
+    pub fn read<'b, T: BitField<'b>>(&mut self, args: T::Args) -> Result<T> {
+        T::read(self, args)
     }
 
     /// Reads all remaining bytes
@@ -124,10 +138,12 @@ impl<'a> BitStream<'a> {
     }
 }
 
-macro_rules! impl_read_sized_for_signed {
+macro_rules! impl_bit_field_for_signed {
     ($ty: ty) => {
-        impl SizedBitField for $ty {
-            fn read_sized(stream: &mut BitStream, size: u8) -> Result<Self> {
+        impl<'a> BitField<'a> for $ty {
+            type Args = u8;
+
+            fn read(stream: &mut BitStream, size: u8) -> Result<Self> {
                 if size as usize > size_of::<$ty>() * 8 {
                     return Err(BitStreamError::TooLarge);
                 }
@@ -144,17 +160,19 @@ macro_rules! impl_read_sized_for_signed {
     };
 }
 
-impl_read_sized_for_signed!(i8);
-impl_read_sized_for_signed!(i16);
-impl_read_sized_for_signed!(i32);
-impl_read_sized_for_signed!(i64);
-impl_read_sized_for_signed!(i128);
-impl_read_sized_for_signed!(isize);
+impl_bit_field_for_signed!(i8);
+impl_bit_field_for_signed!(i16);
+impl_bit_field_for_signed!(i32);
+impl_bit_field_for_signed!(i64);
+impl_bit_field_for_signed!(i128);
+impl_bit_field_for_signed!(isize);
 
-macro_rules! impl_read_sized_for_unsigned {
+macro_rules! impl_bit_field_for_unsigned {
     ($ty: ty) => {
-        impl SizedBitField for $ty {
-            fn read_sized(stream: &mut BitStream, size: u8) -> Result<Self> {
+        impl<'a> BitField<'a> for $ty {
+            type Args = u8;
+
+            fn read(stream: &mut BitStream, size: u8) -> Result<Self> {
                 if size as usize > size_of::<$ty>() * 8 {
                     return Err(BitStreamError::TooLarge);
                 }
@@ -170,12 +188,12 @@ macro_rules! impl_read_sized_for_unsigned {
     };
 }
 
-impl_read_sized_for_unsigned!(u8);
-impl_read_sized_for_unsigned!(u16);
-impl_read_sized_for_unsigned!(u32);
-impl_read_sized_for_unsigned!(u64);
-impl_read_sized_for_unsigned!(u128);
-impl_read_sized_for_unsigned!(usize);
+impl_bit_field_for_unsigned!(u8);
+impl_bit_field_for_unsigned!(u16);
+impl_bit_field_for_unsigned!(u32);
+impl_bit_field_for_unsigned!(u64);
+impl_bit_field_for_unsigned!(u128);
+impl_bit_field_for_unsigned!(usize);
 
 #[cfg(test)]
 mod tests {

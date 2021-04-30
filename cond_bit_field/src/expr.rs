@@ -76,10 +76,6 @@ impl Parse for Expr {
         let mut atom = Self::unary_expr(input)?;
         attrs.extend(atom.replace_attrs(Vec::new()));
         atom.replace_attrs(attrs);
-        match atom {
-            Self::Field(ref mut field) => field.process_fake_attrs()?,
-            _ => {}
-        };
         Ok(atom)
     }
 }

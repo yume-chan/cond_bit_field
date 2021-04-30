@@ -6,20 +6,20 @@ use serde::Serialize;
 #[derive(Clone, Copy, Debug, Eq, Hash, NewNumber, PartialEq, Serialize)]
 pub struct UnsignedExpGolombCode(pub u64);
 
-impl BitField for UnsignedExpGolombCode {
-    fn read(stream: &mut BitStream) -> Result<Self> {
+impl<'a> BitField<'a> for UnsignedExpGolombCode {
+    type Args = ();
+
+    fn read(stream: &mut BitStream, _: ()) -> Result<Self> {
         let mut length = 0;
         while !stream.read_bit()? {
             length += 1;
         }
 
         if length == 0 {
-            return Ok(UnsignedExpGolombCode(0));
+            return Ok(Self(0));
         }
 
-        Ok(UnsignedExpGolombCode(
-            (1 << length | stream.read_sized::<u64, _>(length)?) - 1,
-        ))
+        Ok(Self((1 << length | stream.read::<u64>(length)?) - 1))
     }
 }
 
@@ -27,9 +27,11 @@ impl BitField for UnsignedExpGolombCode {
 #[derive(Clone, Copy, Debug, Eq, Hash, NewNumber, PartialEq, Serialize)]
 pub struct SignedExpGolombCode(pub i64);
 
-impl BitField for SignedExpGolombCode {
-    fn read(stream: &mut BitStream) -> Result<Self> {
-        let ue = stream.read::<UnsignedExpGolombCode>()?.0;
+impl<'a> BitField<'a> for SignedExpGolombCode {
+    type Args = ();
+
+    fn read(stream: &mut BitStream, _: ()) -> Result<Self> {
+        let ue = stream.read::<UnsignedExpGolombCode>(())?.0;
         // Safety: `i64::MAX` equals to `u64::MAX >> 1`
         // So `(u64 >> 1) as i64` will never overflow
         Ok(Self(if ue % 1 == 1 {

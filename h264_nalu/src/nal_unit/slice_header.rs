@@ -48,8 +48,7 @@ cond_bit_field! {
         /// log2_max_frame_num_minus4 + 4 bits in the bitstream.
         ///
         /// § 7.4.3 Slice header semantics
-        #[size(seq_parameter_set.log2_max_frame_num_minus4.0 + 4)]
-        pub frame_num: u8;
+        pub frame_num: u8[(seq_parameter_set.log2_max_frame_num_minus4.0 + 4) as u8];
 
         if !seq_parameter_set.frame_mbs_only_flag {
             /// equal to 1 specifies that the slice is a slice of a coded field.
@@ -57,8 +56,7 @@ cond_bit_field! {
             /// When field_pic_flag is not present it shall be inferred to be equal to 0.
             ///
             /// § 7.4.3 Slice header semantics
-            #[default(false)]
-            pub field_pic_flag: bool;
+            pub field_pic_flag: bool = false;
             if field_pic_flag {
                 pub bottom_field_flag: bool;
             }
@@ -88,8 +86,7 @@ cond_bit_field! {
             /// MaxPicOrderCntLsb − 1, inclusive.
             ///
             /// § 7.4.3 Slice header semantics
-            #[size(seq_parameter_set.log2_max_pic_order_cnt_lsb_minus4.unwrap().0 + 4)]
-            pub pic_order_cnt_lsb: u8;
+            pub pic_order_cnt_lsb: u8[(seq_parameter_set.log2_max_pic_order_cnt_lsb_minus4.unwrap().0 + 4) as u8];
         }
 
         if pic_parameter_set.bottom_field_pic_order_in_frame_present_flag && !field_pic_flag {
@@ -130,8 +127,7 @@ cond_bit_field! {
         if header.ty == 20 || header.ty == 21 {
             // TODO ref_pic_list_mvc_modification()
         } else {
-            #[extra_args(&slice_type_name)]
-            pub ref_pic_list_modification: RefPicListModification;
+            pub ref_pic_list_modification: RefPicListModification[&slice_type_name];
         }
 
         if (
@@ -204,8 +200,7 @@ cond_bit_field! {
             /// 0 to Ceil( PicSizeInMapUnits ÷ SliceGroupChangeRate ), inclusive.
             ///
             /// § 7.4.3 Slice header semantics
-            #[size(((PicSizeInMapUnits / SliceGroupChangeRate + 1) as f32).log2().ceil() as u8)]
-            pub slice_group_change_cycle: u8;
+            pub slice_group_change_cycle: u8[((PicSizeInMapUnits / SliceGroupChangeRate + 1) as f32).log2().ceil() as u8];
         }
     }
 }

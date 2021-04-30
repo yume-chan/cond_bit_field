@@ -2,10 +2,10 @@ use std::iter;
 
 use proc_macro2::{Ident, TokenStream};
 use quote::{quote, ToTokens, TokenStreamExt};
-use syn::{parenthesized,
+use syn::{bracketed, parenthesized,
           parse::{Parse, ParseStream, Parser},
           punctuated::Punctuated,
-          token, Attribute, LitInt, PatType, Result, Token, Visibility};
+          token, Attribute, LitInt, Result, Token, Visibility};
 
 use crate::{block::ExprBlock,
             traits::{FieldIter, FlatFields},
@@ -80,12 +80,6 @@ pub struct Field {
     /// Attributes tagged on the field.
     pub attrs: Vec<Attribute>,
 
-    pub size: Option<syn::Expr>,
-
-    pub default: Option<syn::Expr>,
-
-    pub extra_args: Option<Punctuated<syn::Expr, token::Comma>>,
-
     /// Visibility of the field.
     pub vis: Visibility,
 
@@ -99,6 +93,10 @@ pub struct Field {
     /// Type of the field.
     pub ty: ComplexType,
 
+    pub params: Option<Punctuated<syn::Expr, token::Comma>>,
+
+    pub default: Option<syn::Expr>,
+
     pub semicolon_token: token::Semi,
 }
 
@@ -111,95 +109,59 @@ impl Field {
     }
 
     pub fn to_initializer(&self) -> TokenStream {
-        match self.size {
-            Some(ref size) => quote! {stream.read_sized(#size)?},
-            None => match self.ty.inner_most() {
-                Type::Bool { .. } => quote! {stream.read_bit()?},
-                Type::Number { size, .. } => quote! {stream.read_sized(#size)?},
-                Type::Struct(ty) => match &self.extra_args {
-                    Some(extra_args) => quote! {#ty::read(stream, #extra_args)?},
-                    None => quote! {stream.read()?},
-                },
-            },
-        }
-    }
-
-    pub fn process_fake_attrs(&mut self) -> Result<()> {
-        let attrs = std::mem::take(&mut self.attrs);
-
-        let mut size_attribute: Option<Attribute> = None;
-        let mut default_attribute: Option<Attribute> = None;
-        let mut extra_args_attribute: Option<Attribute> = None;
-
-        let attrs = attrs
-            .into_iter()
-            .filter(|x| {
-                let segments = &x.path.segments;
-                if segments.len() == 1 {
-                    let first = segments.first().unwrap();
-                    match first.ident.to_string().as_str() {
-                        "size" => size_attribute = Some(x.clone()),
-                        "default" => default_attribute = Some(x.clone()),
-                        "extra_args" => extra_args_attribute = Some(x.clone()),
-                        _ => return true,
-                    }
-                    return false;
+        match self.ty.inner_most() {
+            Type::Bool { .. } => quote! {stream.read_bit()?},
+            Type::Number { size, .. } => {
+                if let Some(params) = &self.params {
+                    quote! {stream.read(#params)?}
+                } else {
+                    quote! {stream.read(#size)?}
                 }
-                true
-            })
-            .collect::<Vec<_>>();
-
-        let size = match size_attribute {
-            Some(attribute) => {
-                let args =
-                    ParseParen::parse_with(attribute.tokens, syn::Expr::parse_without_eager_brace)?;
-                Some(args.content)
             }
-            None => None,
-        };
-
-        let default = match default_attribute {
-            Some(attribute) => {
-                let args =
-                    ParseParen::parse_with(attribute.tokens, syn::Expr::parse_without_eager_brace)?;
-                Some(args.content)
+            Type::Struct(_) => {
+                if let Some(params) = &self.params {
+                    quote! {stream.read((#params))?}
+                } else {
+                    quote! {stream.read(())?}
+                }
             }
-            None => None,
-        };
-
-        let extra_args = match extra_args_attribute {
-            Some(attribute) => {
-                let args = ParseParen::parse_with(attribute.tokens, |input| {
-                    Punctuated::<syn::Expr, token::Comma>::parse_terminated_with(
-                        input,
-                        syn::Expr::parse_without_eager_brace,
-                    )
-                })?;
-                Some(args.content)
-            }
-            None => None,
-        };
-
-        self.attrs = attrs;
-        self.size = size;
-        self.default = default;
-        self.extra_args = extra_args;
-
-        Ok(())
+        }
     }
 }
 
 impl Parse for Field {
     fn parse(input: ParseStream) -> Result<Self> {
+        let vis = input.parse()?;
+        let ident = input.parse()?;
+        let colon_token = input.parse()?;
+        let ty = ComplexType::Simple(input.parse()?);
+
+        let mut params = None;
+        if input.peek(token::Bracket) {
+            let content;
+            let _ = bracketed!(content in input);
+            params = Some(
+                Punctuated::<syn::Expr, token::Comma>::parse_terminated_with(
+                    &content,
+                    syn::Expr::parse_without_eager_brace,
+                )?,
+            );
+        }
+
+        let mut default = None;
+        if input.peek(Token![=]) {
+            let _: Token![=] = input.parse()?;
+            default = Some(input.parse()?);
+        }
+
         Ok(Field {
             attrs: Vec::new(),
-            size: None,
-            default: None,
-            extra_args: None,
-            vis: input.parse()?,
-            ident: input.parse()?,
-            colon_token: input.parse()?,
-            ty: ComplexType::Simple(input.parse()?),
+            vis,
+            ident,
+            colon_token,
+            ty,
+            params,
+            default,
             semicolon_token: input.parse()?,
         })
     }
@@ -228,11 +190,25 @@ impl ToTokens for Field {
 
 pub struct Struct {
     pub attrs: Vec<Attribute>,
-    pub extra_args: Option<Punctuated<PatType, token::Comma>>,
+    pub extra_args: Option<Punctuated<SimplePatType, token::Comma>>,
     pub vis: Visibility,
     pub struct_token: Token![struct],
     pub ident: Ident,
     pub fields: ExprBlock,
+}
+
+pub struct SimplePatType {
+    pub ident: Ident,
+    pub colon_token: Token![:],
+    pub ty: syn::Type,
+}
+
+impl ToTokens for SimplePatType {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        self.ident.to_tokens(tokens);
+        self.colon_token.to_tokens(tokens);
+        self.ty.to_tokens(tokens);
+    }
 }
 
 impl Parse for Struct {
@@ -257,14 +233,16 @@ impl Parse for Struct {
         let extra_args = match extra_args_attribute {
             Some(attribute) => {
                 let args = ParseParen::parse_with(attribute.tokens, |input| {
-                    Punctuated::<PatType, token::Comma>::parse_terminated_with(input, |input| {
-                        Ok(PatType {
-                            attrs: Vec::new(),
-                            pat: input.parse()?,
-                            colon_token: input.parse()?,
-                            ty: input.parse()?,
-                        })
-                    })
+                    Punctuated::<SimplePatType, token::Comma>::parse_terminated_with(
+                        input,
+                        |input| {
+                            Ok(SimplePatType {
+                                ident: input.parse()?,
+                                colon_token: input.parse()?,
+                                ty: input.parse()?,
+                            })
+                        },
+                    )
                 })?;
                 Some(args.content)
             }
@@ -317,31 +295,38 @@ impl ToTokens for Struct {
         let initializers = &fields.stmts;
         let field_names = fields.flat_fields().map(|x| x.ident);
 
-        match extra_args {
-            Some(extra_args) => {
-                tokens.extend(quote! {
-                    impl #ident {
-                        pub fn read(stream: &mut bit_stream::BitStream, #extra_args) -> bit_stream::Result<Self> {
-                            #(#initializers)*
-                            Ok(Self {
-                                #(#field_names),*
-                            })
-                        }
-                    }
-                });
+        let mut arg_types = Vec::<TokenStream>::new();
+        let mut arg_names = Vec::<&Ident>::new();
+
+        if let Some(args) = &extra_args {
+            for SimplePatType { ident, ty, .. } in args {
+                if let syn::Type::Reference(syn::TypeReference {
+                    mutability, elem, ..
+                }) = &ty
+                {
+                    arg_types.push(quote! {&'a #mutability #elem});
+                } else {
+                    arg_types.push(quote! {#ty});
+                }
+
+                arg_names.push(ident);
             }
-            None => {
-                tokens.extend(quote! {
-                    impl bit_stream::BitField for #ident {
-                        fn read(stream: &mut bit_stream::BitStream) -> bit_stream::Result<Self> {
-                            #(#initializers)*
-                            Ok(Self {
-                                #(#field_names),*
-                            })
-                        }
-                    }
-                });
+        }
+
+        let arg_destruction = quote! {let (#(#arg_names),*) = args;};
+
+        tokens.extend(quote! {
+            impl<'a> bit_stream::BitField<'a> for #ident {
+                type Args = (#(#arg_types),*);
+
+                fn read  (stream: &mut bit_stream::BitStream, args: Self::Args) -> bit_stream::Result<Self> {
+                    #arg_destruction
+                    #(#initializers)*
+                    Ok(Self {
+                        #(#field_names),*
+                    })
+                }
             }
-        };
+        });
     }
 }

@@ -1,4 +1,4 @@
-use bit_stream::{cond_bit_field, BitStream, Result};
+use bit_stream::{BitField, BitStream, Result, cond_bit_field};
 use serde::Serialize;
 
 mod access_unit_delimiter;
@@ -30,13 +30,16 @@ pub enum NalUnitPayload {
     Unknown(Box<[u8]>),
 }
 
-impl NalUnitPayload {
-    pub fn read(stream: &mut BitStream, decoder: &Decoder, header: &NalUnitHeader) -> Result<Self> {
+impl<'a> BitField<'a> for NalUnitPayload {
+    type Args = (&'a Decoder, &'a NalUnitHeader);
+
+    fn read(stream: &mut BitStream, (decoder, header): Self::Args) -> Result<Self> {
         Ok(match header.ty {
-            7 => stream.read().map(NalUnitPayload::SequenceParameterSet)?,
-            8 => PictureParameterSet::read(stream, decoder)
+            7 => stream.read(()).map(NalUnitPayload::SequenceParameterSet)?,
+            8 => stream
+                .read(decoder)
                 .map(NalUnitPayload::PictureParameterSet)?,
-            9 => stream.read().map(NalUnitPayload::AccessUnitDelimiter)?,
+            9 => stream.read(()).map(NalUnitPayload::AccessUnitDelimiter)?,
             _ => NalUnitPayload::Unknown(stream.read_all()),
         })
     }
@@ -47,7 +50,6 @@ cond_bit_field! {
     #[extra_args(decoder: &Decoder)]
     pub struct NalUnit {
         pub header: NalUnitHeader;
-        #[extra_args(decoder, &header)]
-        pub payload: NalUnitPayload;
+        pub payload: NalUnitPayload[decoder, &header];
     }
 }

@@ -51,8 +51,7 @@ cond_bit_field! {
                     /// inferred to be equal to 0.
                     ///
                     /// § 7.4.1 NAL unit semantics
-                    #[default(false)]
-                    pub svc_extension_flag: bool;
+                    pub svc_extension_flag: bool = false;
                 } else {
                     /// indicates for NAL units having nal_unit_type equal
                     /// to 21 whether a nal_unit_header_mvc_extension( ) or
@@ -62,8 +61,7 @@ cond_bit_field! {
                     /// avc_3d_extension_flag is inferred to be equal to 0.
                     ///
                     /// § 7.4.1 NAL unit semantics
-                    #[default(false)]
-                    pub avc_3d_extension_flag: bool;
+                    pub avc_3d_extension_flag: bool = false;
                 }
 
                 if svc_extension_flag {

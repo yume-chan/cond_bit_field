@@ -52,8 +52,7 @@ cond_bit_field! {
                 /// colour_plane_id value.
                 ///
                 /// § 7.4.2.1.1 Sequence parameter set data semantics
-                #[default(false)]
-                pub separate_colour_plane_flag: bool;
+                pub separate_colour_plane_flag: bool = false;
             }
 
             pub bit_depth_luma_minus8: UnsignedExpGolombCode;
@@ -63,13 +62,11 @@ cond_bit_field! {
 
             if seq_scaling_matrix_present_flag {
                 for _ in 0..6 {
-                    #[size(16)]
-                    pub scaling_list_4x4: ScalingList;
+                    pub scaling_list_4x4: ScalingList[16];
                 }
 
                 for _ in 0..(if chroma_format_idc != 3 { 2 } else { 6 }){
-                    #[size(64)]
-                    pub scaling_list_8x8: ScalingList;
+                    pub scaling_list_8x8: ScalingList[64];
                 }
             }
         }
@@ -103,8 +100,7 @@ cond_bit_field! {
             /// it shall be inferred to be equal to 0.
             ///
             /// § 7.4.2.1.1 Sequence parameter set data semantics
-            #[default(false)]
-            pub mb_adaptive_frame_field_flag: bool;
+            pub mb_adaptive_frame_field_flag: bool = false;
         }
 
         pub direct_8x8_inference_flag: bool;

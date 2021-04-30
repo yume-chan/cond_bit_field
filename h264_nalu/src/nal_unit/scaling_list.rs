@@ -1,5 +1,5 @@
 use crate::nal_unit::SignedExpGolombCode;
-use bit_stream::{BitStream, Result, SizedBitField};
+use bit_stream::{BitField, BitStream, Result};
 use serde::Serialize;
 
 #[derive(Clone, Debug, Serialize)]
@@ -8,12 +8,14 @@ pub struct ScalingList {
     pub use_default_scaling_matrix_flag: bool,
 }
 
-impl SizedBitField for ScalingList {
-    fn read_sized(reader: &mut BitStream, size: u8) -> Result<Self> {
+impl<'a> BitField<'a> for ScalingList {
+    type Args = u8;
+
+    fn read(stream: &mut BitStream, size: u8) -> Result<Self> {
         let mut list: Vec<u8> = Vec::with_capacity(size as usize);
 
         let mut last_scale = {
-            let delta_scale: SignedExpGolombCode = reader.read()?;
+            let delta_scale: SignedExpGolombCode = stream.read(())?;
             ((8 + delta_scale + 256) % 256) as u8
         };
 
@@ -29,7 +31,7 @@ impl SizedBitField for ScalingList {
 
         let mut j = 1u8;
         loop {
-            let delta_scale: SignedExpGolombCode = reader.read()?;
+            let delta_scale: SignedExpGolombCode = stream.read(())?;
             let next_scale: u8 = ((last_scale as i64 + delta_scale.0 + 256) % 256) as u8;
 
             j += 1;

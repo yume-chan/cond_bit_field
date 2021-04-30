@@ -38,8 +38,7 @@ cond_bit_field! {
                 6 => {
                     pub pic_size_in_map_units_minus1: UnsignedExpGolombCode;
                     for _ in 0..pic_size_in_map_units_minus1.0 {
-                        #[size((num_slice_groups_minus1.0 as f32 + 1f32).log2().ceil() as u8)]
-                        pub slice_group_id: u8;
+                        pub slice_group_id: u8[(num_slice_groups_minus1.0 as f32 + 1f32).log2().ceil() as u8];
                     }
                 }
                 _ => {}
@@ -65,15 +64,13 @@ cond_bit_field! {
 
             if pic_scaling_matrix_present_flag {
                 for _ in 0..6 {
-                    #[size(16)]
-                    pub scaling_list_4x4: ScalingList;
+                    pub scaling_list_4x4: ScalingList[16];
                 }
 
                 if transform_8x8_mode_flag {
                     let seq_parameter_set = decoder.find_sequence_parameter_set(seq_parameter_set_id).unwrap();
                     for _ in 0..(if seq_parameter_set.chroma_format_idc != Some(UnsignedExpGolombCode(3)) { 2 } else { 6 }){
-                        #[size(64)]
-                        pub scaling_list_8x8: ScalingList;
+                        pub scaling_list_8x8: ScalingList[64];
                     }
                 }
             }
