@@ -35,7 +35,7 @@ cond_bit_field! {
     #[derive(Clone, Debug, Serialize)]
     #[extra_args(decoder: &Decoder, header: &NalUnitHeader)]
     pub struct SliceLayerWithoutPartitioning {
-        pub slice_header: SliceHeader[(decoder, header)];
-        pub slice_data: SliceData[(decoder, &slice_header)];
+        pub slice_header: SliceHeader[decoder, header];
+        pub slice_data: SliceData[decoder, &slice_header];
     }
 }
