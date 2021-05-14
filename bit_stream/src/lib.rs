@@ -1,7 +1,6 @@
 use std::mem::size_of;
-use thiserror::Error;
 
-pub use cond_bit_field::*;
+use thiserror::Error;
 
 /// The error type for `BitStream`'s read operations
 #[derive(Error, Debug)]
@@ -9,45 +8,29 @@ pub enum BitStreamError {
     /// The `BitStream` has not enough bits for the requested size.
     #[error("Not enough data")]
     NotEnoughData,
+
     /// The requested size doesn't fit into the result type.
     #[error("Requested size too large for result type")]
     TooLarge,
 }
 
+pub type Result<T> = ::std::result::Result<T, BitStreamError>;
+
 /// The `BitField` trait defines how to `read` from a `BitStream`
-pub trait BitField<'a> {
+pub trait BitField<'a>: Sized {
+    /// Type of extra arguments for `read`.
+    ///
+    /// The exact meaning of each argument is defined by each type.
+    /// For example, it can be the size of the value, or some other
+    /// required data for reading the value.
+    ///
+    /// Can be `()` if no extra arguments are required,
+    /// or a tuple type if multiple arguments are required.
     type Args;
 
-    /// Read from a `BitStream`.
-    fn read(stream: &mut BitStream, args: Self::Args) -> Result<Self>
-    where
-        Self: Sized;
+    /// Reads from a `BitStream`.
+    fn read(stream: &mut BitStream, args: Self::Args) -> Result<Self>;
 }
-
-// trait FooTrait {
-//     type Arg;
-
-//     fn foo(arg: Self::Arg) -> Self
-//     where
-//         Self: Sized;
-// }
-
-// struct Foo {
-//     pub value: u8,
-// }
-
-// impl FooTrait for Foo {
-//     type Arg = &'static u8;
-
-//     fn foo<'a>(args: &'a u8) -> Self
-//     where
-//         Self: Sized,
-//     {
-//         Self {
-//             value: args.clone(),
-//         }
-//     }
-// }
 
 /// A stream that can be read bit by bit
 pub struct BitStream<'a> {
@@ -56,8 +39,6 @@ pub struct BitStream<'a> {
     byte: u8,
     pos: u8,
 }
-
-pub type Result<T> = std::result::Result<T, BitStreamError>;
 
 impl<'a> BitStream<'a> {
     /// Creates a new `BitStream`.
@@ -81,7 +62,7 @@ impl<'a> BitStream<'a> {
         (self.data.len() - self.offset) * 8 - self.pos as usize
     }
 
-    /// Skips and throw away `bit_count` bits.
+    /// Skip (throw away) `bit_count` bits.
     pub fn skip(&mut self, bit_count: usize) -> Result<()> {
         let pos_overflow = self.pos as usize + bit_count;
 

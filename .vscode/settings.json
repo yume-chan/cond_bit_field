@@ -11,8 +11,10 @@
         "luma",
         "nalu",
         "overscan",
+        "paren",
         "qpprime",
         "serde",
+        "stmts",
         "thiserror",
         "wasm"
     ],

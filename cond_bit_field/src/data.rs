@@ -13,11 +13,8 @@ use crate::{block::ExprBlock,
 
 pub struct Skip {
     pub underscore_token: token::Underscore,
-
     pub colon_token: token::Colon,
-
     pub size: LitInt,
-
     pub semicolon_token: token::Semi,
 }
 
@@ -83,9 +80,7 @@ pub struct Field {
     /// Visibility of the field.
     pub vis: Visibility,
 
-    /// Name of the field, if any.
-    ///
-    /// Fields of tuple structs have no names.
+    /// Name of the field.
     pub ident: Ident,
 
     pub colon_token: token::Colon,
@@ -93,6 +88,7 @@ pub struct Field {
     /// Type of the field.
     pub ty: ComplexType,
 
+    /// Extended field: optional parameters for `BitField::read`
     pub params: Option<Punctuated<syn::Expr, token::Comma>>,
 
     pub default: Option<syn::Expr>,
