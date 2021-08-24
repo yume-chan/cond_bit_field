@@ -179,186 +179,176 @@ impl_bit_field_for_unsigned!(usize);
 #[cfg(test)]
 mod tests {
     use crate as bit_stream;
-    use cond_bit_field::cond_bit_field;
+    use cond_bit_field::bit_field;
 
-    cond_bit_field! {
-      struct Simple {
-        pub a: bool;
-        pub b: i1;
-        _: 10;
-        pub c: u1;
-        pub d: i4;
-        pub e: u4;
-        _: 10;
-        pub f: i7;
-        pub g: u7;
-        pub h: i14;
-        pub i: u14;
-        _: 10;
-        pub j: i18;
-        pub k: u18;
-        _: 10;
-      }
+    #[bit_field]
+    pub fn Simple() {
+        let a: bool;
+        let b: i1;
+        let _ = 10;
+        let c: u1;
+        let d: i4;
+        let e: u4;
+        let _ = 10;
+        let f: i7;
+        let g: u7;
+        let h: i14;
+        let i: u14;
+        let _ = 10;
+        let j: i18;
+        let k: u18;
+        let _ = 10;
     }
 
-    cond_bit_field! {
-      struct IfWithoutElse {
-        pub a: bool;
-        _: 10;
+    #[bit_field]
+    pub fn IfWithoutElse() {
+        let a: bool;
+        let _ = 10;
 
         if a {
-          _: 10;
-          pub b: u3;
-          _: 10;
-          pub c: i15;
-          _: 10;
+            let _ = 10;
+            let b: u3;
+            let _ = 10;
+            let c: i15;
+            let _ = 10;
         }
 
-        _: 10;
-      }
+        let _ = 10;
     }
 
-    cond_bit_field! {
-      struct IfElse {
-        pub a: bool;
-        _: 10;
+    #[bit_field]
+    pub fn IfElse() {
+        let a: bool;
+        let _ = 10;
 
         if a {
-          _: 10;
-          pub b: u3;
-          _: 10;
-          pub c: i15;
-          _: 10;
+            let _ = 10;
+            let b: u3;
+            let _ = 10;
+            let c: i15;
+            let _ = 10;
         } else {
-          _: 10;
-          pub d: i4;
-          _: 10;
-          pub e: u10;
-          _: 10;
+            let _ = 10;
+            let d: i4;
+            let _ = 10;
+            let e: u10;
+            let _ = 10;
         }
 
-        _: 10;
-        pub z: bool;
-      }
+        let _ = 10;
+        let z: bool;
     }
 
-    cond_bit_field! {
-      struct IfElseIf {
-        pub a: bool;
-        _: 10;
+    #[bit_field]
+    pub fn IfElseIf() {
+        let a: bool;
+        let _ = 10;
 
         if a {
-          _: 10;
-          pub b: u3;
-          _: 10;
-          pub c: i15;
-          _: 10;
+            let _ = 10;
+            let b: u3;
+            let _ = 10;
+            let c: i15;
+            let _ = 10;
         } else if !a {
-          _: 10;
-          pub d: i4;
-          _: 10;
-          pub e: u10;
-          _: 10;
+            let _ = 10;
+            let d: i4;
+            let _ = 10;
+            let e: u10;
+            let _ = 10;
         }
 
-        _: 10;
-        pub z: bool;
-      }
+        let _ = 10;
+        let z: bool;
     }
 
-    cond_bit_field! {
-      struct IfElseIfElse {
-        pub a: bool;
-        _: 10;
+    #[bit_field]
+    pub fn IfElseIfElse() {
+        let a: bool;
+        let _ = 10;
 
         if a {
-          _: 10;
-          pub b: u3;
-          _: 10;
-          pub c: i15;
-          _: 10;
+            let _ = 10;
+            let b: u3;
+            let _ = 10;
+            let c: i15;
+            let _ = 10;
         } else if !a {
-          _: 10;
-          pub d: i4;
-          _: 10;
-          pub e: u10;
-          _: 10;
+            let _ = 10;
+            let d: i4;
+            let _ = 10;
+            let e: u10;
+            let _ = 10;
         } else {
-          pub f: bool;
-          _: 10;
-          pub g: i33;
-          _: 10;
+            let f: bool;
+            let _ = 10;
+            let g: i33;
+            let _ = 10;
         }
 
-        _: 10;
-        pub z: bool;
-      }
+        let _ = 10;
+        let z: bool;
     }
 
-    cond_bit_field! {
-      struct IfElseIfElseIf {
-        pub a: bool;
-        pub b: bool;
-        _: 10;
+    #[bit_field]
+    pub fn IfElseIfElseIf() {
+        let a: bool;
+        let b: bool;
+        let _ = 10;
 
         if a {
-          pub c: u3;
-          _: 10;
-          pub d: i15;
-          _: 10;
+            let c: u3;
+            let _ = 10;
+            let d: i15;
+            let _ = 10;
         } else if !a {
-          _: 10;
-          pub e: i4;
-          _: 10;
-          pub f: u10;
+            let _ = 10;
+            let e: i4;
+            let _ = 10;
+            let f: u10;
         } else if b {
-          pub g: bool;
-          _: 10;
-          pub h: i33;
-          _: 10;
+            let g: bool;
+            let _ = 10;
+            let h: i33;
+            let _ = 10;
         }
 
-        pub z: bool;
-      }
+        let z: bool;
     }
 
-    cond_bit_field! {
-      struct RecursiveIf {
-        pub a: bool;
-        pub b: bool;
-        _: 10;
+    #[bit_field]
+    pub fn RecursiveIf() {
+        let a: bool;
+        let b: bool;
+        let _ = 10;
 
         if a {
-          pub c: u3;
-          _: 10;
-          pub d: i15;
-          _: 10;
+            let c: u3;
+            let _ = 10;
+            let d: i15;
+            let _ = 10;
 
-          if !a {
-            pub e: i4;
-            _: 10;
-            pub f: u10;
-            _: 10;
-          } else if b {
-            pub g: bool;
-            _: 10;
-            pub h: i33;
-            _: 10;
-          }
+            if !a {
+                let e: i4;
+                let _ = 10;
+                let f: u10;
+                let _ = 10;
+            } else if b {
+                let g: bool;
+                let _ = 10;
+                let h: i33;
+                let _ = 10;
+            }
 
-          _: 10;
-          pub z: bool;
+            let _ = 10;
+            let z: bool;
         }
-      }
     }
 
-    cond_bit_field! {
-      struct EmptyForLoop {
+    #[bit_field]
+    pub fn EmptyForLoop() {
         if true {
-          for _ in 0..100 {
-
-          }
+            for _ in 0..100 {}
         }
-      }
     }
 }
