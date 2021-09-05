@@ -181,6 +181,17 @@ mod tests {
     use crate as bit_stream;
     use cond_bit_field::bit_field;
 
+    #[cfg(test)]
+    mod test {
+        use super::*;
+
+        #[bit_field]
+        fn Foo(reader: &mut BitStream) {
+            #[field]
+            let foo: u8;
+        }
+    }
+
     #[bit_field]
     pub fn Simple() {
         let a: bool;
