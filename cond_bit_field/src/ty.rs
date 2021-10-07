@@ -2,66 +2,74 @@ use proc_macro2::{Ident, Span, TokenStream};
 use quote::{format_ident, quote, quote_spanned, ToTokens, TokenStreamExt};
 use syn::{parse::{Parse, ParseStream},
           spanned::Spanned,
-          Error, PathArguments, Result, TypePath};
+          Error, PathArguments, Result, Type, TypePath};
 
 #[derive(Clone)]
-pub enum Type {
+pub enum SimpleFieldType {
     Bool { span: Span },
     Number { signed: bool, size: u8, span: Span },
     Struct(TypePath),
 }
 
-impl Parse for Type {
-    fn parse(input: ParseStream) -> Result<Self> {
-        let ty = input.parse::<TypePath>()?;
+impl SimpleFieldType {
+    pub fn parse(ty: &Type) -> syn::Result<Self> {
+        let type_path = match ty {
+            Type::Path(type_path) => Ok(type_path.clone()),
+            _ => Err(syn::Error::new_spanned(
+                ty,
+                "field's type must be a type path",
+            )),
+        }?;
 
-        if ty.qself != None {
-            return Ok(Type::Struct(ty));
+        if type_path.qself != None {
+            return Ok(SimpleFieldType::Struct(type_path));
         }
 
-        let path = &ty.path;
+        let path = &type_path.path;
         if path.leading_colon != None {
-            return Ok(Type::Struct(ty));
+            return Ok(SimpleFieldType::Struct(type_path));
         }
 
         if path.segments.len() != 1 {
-            return Ok(Type::Struct(ty));
+            return Ok(SimpleFieldType::Struct(type_path));
         }
 
         let segment = &path.segments[0];
         if segment.arguments != PathArguments::None {
-            return Ok(Type::Struct(ty));
+            return Ok(SimpleFieldType::Struct(type_path));
         }
 
         let name = segment.ident.to_string();
         if name == "bool" {
-            return Ok(Type::Bool { span: ty.span() });
+            return Ok(SimpleFieldType::Bool {
+                span: type_path.span(),
+            });
         }
 
         let signed = name
             .chars()
             .nth(0)
-            .ok_or(Error::new(ty.span(), "invalid type name"))?
+            .ok_or(Error::new(type_path.span(), "invalid type name"))?
             == 'i';
 
         match name[1..].parse::<u8>() {
             Ok(size) => {
                 if size > 128 {
-                    return Err(Error::new(ty.span(), "size is too large"));
+                    return Err(Error::new(type_path.span(), "size is too large"));
                 }
 
-                Ok(Type::Number {
+                Ok(SimpleFieldType::Number {
                     signed,
                     size,
-                    span: ty.span(),
+                    span: type_path.span(),
                 })
             }
-            Err(_) => Ok(Type::Struct(ty)),
+            Err(_) => Ok(SimpleFieldType::Struct(type_path)),
         }
     }
 }
 
-impl ToTokens for Type {
+impl ToTokens for SimpleFieldType {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         match self {
             Self::Bool { span } => tokens.extend(quote_spanned!(*span=> bool)),
@@ -89,7 +97,7 @@ impl ToTokens for Type {
 
 #[derive(Clone)]
 pub enum ComplexType {
-    Simple(Type),
+    Simple(SimpleFieldType),
     Vec(Box<ComplexType>),
     Option(Box<ComplexType>),
 }
@@ -111,7 +119,7 @@ impl ComplexType {
         }
     }
 
-    pub fn inner_most(&self) -> &Type {
+    pub fn inner_most(&self) -> &SimpleFieldType {
         match self {
             Self::Simple(inner) => inner,
             Self::Vec(inner) => inner.inner_most(),

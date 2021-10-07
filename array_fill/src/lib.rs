@@ -3,44 +3,35 @@ extern crate proc_macro;
 use proc_macro2::TokenStream;
 use quote::ToTokens;
 use syn::{parse::{Parse, ParseStream},
-          parse_macro_input, token, Error, Expr, ExprLit, Lit, Result};
+          parse_macro_input, token, Error, Expr, ExprLit, Lit};
 
 struct ExprRepeat {
     pub expr: Expr,
-    pub semi_token: token::Semi,
-    pub len: ExprLit,
-    pub len_parsed: usize,
+    pub len: usize,
 }
 
 impl Parse for ExprRepeat {
-    fn parse(input: ParseStream) -> Result<Self> {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
         let expr = input.parse()?;
-        let semi_token = input.parse()?;
-        let len: ExprLit = input.parse()?;
+        input.parse::<token::Semi>()?;
+        let len_lit: ExprLit = input.parse()?;
 
-        let len_parsed = match &len.lit {
-            Lit::Int(int) => int.base10_parse::<usize>()?,
-            _ => {
-                return Err(Error::new_spanned(
-                    len.lit,
-                    "length of repeat expressions must be a number",
-                ))
-            }
-        };
+        let len = match &len_lit.lit {
+            Lit::Int(int) => int.base10_parse::<usize>(),
+            _ => Err(Error::new_spanned(
+                len_lit,
+                "length of repeat expressions must be a number",
+            )),
+        }?;
 
-        Ok(Self {
-            expr,
-            semi_token,
-            len,
-            len_parsed,
-        })
+        Ok(Self { expr, len })
     }
 }
 
 impl ToTokens for ExprRepeat {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         token::Bracket::default().surround(tokens, |tokens| {
-            for _ in 0..self.len_parsed {
+            for _ in 0..self.len {
                 self.expr.to_tokens(tokens);
                 token::Comma::default().to_tokens(tokens);
             }
